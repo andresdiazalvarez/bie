@@ -404,8 +404,8 @@ async function downloadExcel() {
     ["visto", "Visto", 10],
   ];
   sheet.columns = columns.map(([key, header, width]) => ({ key, header, width }));
-  sheet.getRow(1).font = { bold: true, color: { argb: "FF082F49" } };
-  sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF38BDF8" } };
+  sheet.getRow(1).font = { bold: true, color: { argb: "FF0F3A5F" } };
+  sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF93C5FD" } };
   sheet.getRow(1).alignment = { vertical: "middle", horizontal: "center", wrapText: true };
   sheet.getRow(1).height = 30;
 

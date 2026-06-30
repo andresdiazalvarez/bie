@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v3-blue";
+const CACHE_NAME = "bie-v4-light-blue";
 const ASSETS = [
   "./",
   "./index.html",
