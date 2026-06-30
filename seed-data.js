@@ -1,1 +1,0 @@
-window.INITIAL_BIE_LISTADOS = [];
