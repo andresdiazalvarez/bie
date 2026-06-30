@@ -1,0 +1,15 @@
+{
+  "name": "BIE",
+  "short_name": "BIE",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f0eb",
+  "theme_color": "#38bdf8",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
