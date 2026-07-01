@@ -5,10 +5,11 @@ Aplicación nueva y limpia para controlar BIE.
 ## Incluye
 
 - Importar Excel manteniendo también registros repetidos.
-- Filtrar por cliente, edificio y nº serie.
-- Ordenar por cliente o edificio.
+- Filtrar por cliente, edificio, número SYCo y nº serie.
+- Ordenar por cliente, edificio o número SYCo.
 - Editar registros y añadir nuevos.
 - Campo cliente antes de edificio.
+- Número SYCo después de edificio.
 - Modelo con desplegable: 25, 45 y 25T45.
 - Fechas con desplegable de años.
 - Señal de 2017 a 2026.

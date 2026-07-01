@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v6-importa-repetidos";
+const CACHE_NAME = "bie-v7-numero-syco";
 const ASSETS = [
   "./",
   "./index.html",

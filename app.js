@@ -19,6 +19,7 @@ const defectOptions = [
 const fields = [
   "cliente",
   "edificio",
+  "cantidad",
   "ubicacion",
   "modelo",
   "numeroSerie",
@@ -76,6 +77,7 @@ function cleanRecord(record = {}) {
     id: record.id || createId(),
     cliente: safeText(record.cliente),
     edificio: safeText(record.edificio ?? record.edificioCodigo),
+    cantidad: safeText(record.cantidad),
     ubicacion: safeText(record.ubicacion),
     modelo: safeText(record.modelo),
     numeroSerie: safeText(record.numeroSerie),
@@ -106,6 +108,7 @@ function rowToImportedRecord(rowValues, index) {
   for (let col = 1; col <= 10; col += 1) values[col] = excelCellToText(rowValues[col]);
   return cleanRecord({
     id: `import-${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`,
+    cantidad: values[2],
     edificio: values[3],
     ubicacion: values[4],
     modelo: values[6],
@@ -186,6 +189,7 @@ function compareText(a, b) {
 function filteredRecords() {
   const filterCliente = $("filterCliente").value.trim().toLowerCase();
   const filterEdificio = $("filterEdificio").value.trim().toLowerCase();
+  const filterNumero = $("filterNumero").value.trim().toLowerCase();
   const filterSerie = $("filterSerie").value.trim().toLowerCase();
   const seenFilter = $("seenFilter").value;
   const sortOrder = $("sortOrder").value;
@@ -195,12 +199,14 @@ function filteredRecords() {
     if (seenFilter === "pending" && record.visto) return false;
     if (filterCliente && !safeText(record.cliente).toLowerCase().includes(filterCliente)) return false;
     if (filterEdificio && ![record.edificio, record.ubicacion].join(" ").toLowerCase().includes(filterEdificio)) return false;
+    if (filterNumero && !safeText(record.cantidad).toLowerCase().includes(filterNumero)) return false;
     if (filterSerie && !safeText(record.numeroSerie).toLowerCase().includes(filterSerie)) return false;
     return true;
   });
 
   if (sortOrder === "cliente") rows.sort((a, b) => compareText(a.cliente, b.cliente) || compareText(a.edificio, b.edificio));
-  if (sortOrder === "edificio") rows.sort((a, b) => compareText(a.edificio, b.edificio) || compareText(a.cliente, b.cliente));
+  if (sortOrder === "edificio") rows.sort((a, b) => compareText(a.edificio, b.edificio) || compareText(a.cantidad, b.cantidad));
+  if (sortOrder === "numero") rows.sort((a, b) => compareText(a.cantidad, b.cantidad) || compareText(a.edificio, b.edificio));
   return rows;
 }
 
@@ -209,7 +215,7 @@ function renderTable() {
   const rows = filteredRecords();
   body.innerHTML = "";
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="14">No hay registros con ese filtro.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="15">No hay registros con ese filtro.</td></tr>`;
     return;
   }
   for (const record of rows) {
@@ -220,6 +226,7 @@ function renderTable() {
     tr.innerHTML = `
       <td>${safeText(record.cliente) || "-"}</td>
       <td>${safeText(record.edificio) || "-"}</td>
+      <td><strong>${safeText(record.cantidad) || "-"}</strong></td>
       <td>${safeText(record.ubicacion) || "-"}</td>
       <td>${safeText(record.modelo) || "-"}</td>
       <td>${safeText(record.numeroSerie) || "-"}</td>
@@ -351,7 +358,7 @@ async function importExcelFile(file) {
   sheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
     const record = rowToImportedRecord(row.values, rowNumber);
-    const hasData = [record.edificio, record.ubicacion, record.modelo, record.numeroSerie].some((value) => safeText(value).trim());
+    const hasData = [record.edificio, record.cantidad, record.ubicacion, record.modelo, record.numeroSerie].some((value) => safeText(value).trim());
     if (!hasData) return;
     imported.push(record);
   });
@@ -378,6 +385,7 @@ async function downloadExcel() {
   const columns = [
     ["cliente", "Cliente", 22],
     ["edificio", "Edificio", 14],
+    ["cantidad", "Número SYCo", 18],
     ["ubicacion", "Ubicación", 42],
     ["modelo", "Modelo", 20],
     ["numeroSerie", "Nº serie", 18],
@@ -432,7 +440,7 @@ async function downloadExcel() {
       const photo = record.photos[photoIndex];
       if (!photo) return;
       const imageId = workbook.addImage({ base64: photo, extension: "jpeg" });
-      const col = photoIndex === 0 ? 21 : 22;
+      const col = photoIndex === 0 ? 22 : 23;
       sheet.addImage(imageId, { tl: { col, row: row.number - 1 }, ext: { width: 120, height: 85 }, editAs: "oneCell" });
     });
   }
@@ -483,7 +491,7 @@ function bindEvents() {
       event.target.value = "";
     }
   });
-  ["filterCliente", "filterEdificio", "filterSerie", "sortOrder", "seenFilter"].forEach((id) => {
+  ["filterCliente", "filterEdificio", "filterNumero", "filterSerie", "sortOrder", "seenFilter"].forEach((id) => {
     $(id).addEventListener("input", renderTable);
     $(id).addEventListener("change", renderTable);
   });

@@ -47,12 +47,14 @@
         <div class="compactFilters">
           <label>Cliente<input id="filterCliente" type="search" placeholder="Filtrar cliente" /></label>
           <label>Edificio<input id="filterEdificio" type="search" placeholder="Filtrar edificio" /></label>
+          <label>Número SYCo<input id="filterNumero" type="search" placeholder="Filtrar número" /></label>
           <label>Nº serie<input id="filterSerie" type="search" placeholder="Filtrar serie" /></label>
           <label>Ordenar
             <select id="sortOrder">
               <option value="none">Sin ordenar</option>
               <option value="cliente">Cliente</option>
               <option value="edificio">Edificio</option>
+              <option value="numero">Número SYCo</option>
             </select>
           </label>
           <label>Estado
@@ -76,6 +78,7 @@
               <tr>
                 <th>Cliente</th>
                 <th>Edificio</th>
+                <th>Número SYCo</th>
                 <th>Ubicación</th>
                 <th>Modelo</th>
                 <th>Nº serie</th>
@@ -105,6 +108,7 @@
 
           <label>Cliente<input id="cliente" /></label>
           <label>Edificio<input id="edificio" /></label>
+          <label>Número SYCo<input id="cantidad" /></label>
           <label>Ubicación<textarea id="ubicacion" rows="2"></textarea></label>
           <label>Modelo
             <select id="modelo">
