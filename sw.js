@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v4-light-blue";
+const CACHE_NAME = "bie-v6-importa-repetidos";
 const ASSETS = [
   "./",
   "./index.html",

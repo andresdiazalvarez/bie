@@ -20,7 +20,7 @@
       <section id="homeView" class="hero">
         <p class="kicker">CONTROL DE BIE</p>
         <h1>Listado, fotos e importación.</h1>
-        <p class="subtitle">Importa Excel, añade solo registros nuevos, corrige datos, guarda fotos y descarga todo junto.</p>
+        <p class="subtitle">Importa Excel manteniendo repetidos, corrige datos, guarda fotos y descarga todo junto.</p>
 
         <div class="card">
           <div class="stats">
@@ -35,6 +35,7 @@
           <p id="importStatus" class="importStatus"></p>
           <button id="newRecordBtn" class="secondary">Meter dato nuevo</button>
           <button id="downloadExcelBtn" class="secondary">Descargar Excel</button>
+          <button id="deleteAllBtn" class="danger">Eliminar registros existentes</button>
         </div>
       </section>
 
@@ -44,14 +45,14 @@
         <h2>Listado</h2>
 
         <div class="compactFilters">
+          <label>Cliente<input id="filterCliente" type="search" placeholder="Filtrar cliente" /></label>
           <label>Edificio<input id="filterEdificio" type="search" placeholder="Filtrar edificio" /></label>
-          <label>Número SYCo<input id="filterNumero" type="search" placeholder="Filtrar número" /></label>
           <label>Nº serie<input id="filterSerie" type="search" placeholder="Filtrar serie" /></label>
           <label>Ordenar
             <select id="sortOrder">
               <option value="none">Sin ordenar</option>
+              <option value="cliente">Cliente</option>
               <option value="edificio">Edificio</option>
-              <option value="numero">Número SYCo</option>
             </select>
           </label>
           <label>Estado
@@ -66,14 +67,15 @@
         <div class="listActions">
           <button id="newRecordFromListBtn" class="secondary">Meter dato nuevo</button>
           <button id="downloadExcelFromTableBtn" class="secondary">⇩ Descargar todos en Excel</button>
+          <button id="deleteAllFromTableBtn" class="danger">Eliminar registros existentes</button>
         </div>
 
         <div class="tableWrap">
           <table>
             <thead>
               <tr>
+                <th>Cliente</th>
                 <th>Edificio</th>
-                <th>Número SYCo</th>
                 <th>Ubicación</th>
                 <th>Modelo</th>
                 <th>Nº serie</th>
@@ -101,8 +103,8 @@
         <form id="recordForm" class="card formCard">
           <input type="hidden" id="recordId" />
 
+          <label>Cliente<input id="cliente" /></label>
           <label>Edificio<input id="edificio" /></label>
-          <label>Número SYCo<input id="cantidad" /></label>
           <label>Ubicación<textarea id="ubicacion" rows="2"></textarea></label>
           <label>Modelo
             <select id="modelo">
@@ -114,12 +116,10 @@
           </label>
           <label>Nº serie<input id="numeroSerie" /></label>
           <label>Fecha / año fabricación
-            <input id="fechaFabricacion" list="aniosFabricacion" placeholder="Escribe o elige año" />
-            <datalist id="aniosFabricacion"></datalist>
+            <select id="fechaFabricacion"></select>
           </label>
           <label>Fecha retimbrado
-            <input id="fechaProximoRetimbrado" list="aniosRetimbrado" placeholder="Escribe o elige año" />
-            <datalist id="aniosRetimbrado"></datalist>
+            <select id="fechaProximoRetimbrado"></select>
           </label>
           <label>Observaciones<textarea id="observaciones" rows="3"></textarea></label>
           <label>Señal
