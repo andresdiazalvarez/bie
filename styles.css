@@ -133,7 +133,38 @@ button {
   border: 1px solid var(--line);
   width: auto;
   min-width: 92px;
+}
+
+.formTopLine {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
   margin-bottom: 24px;
+}
+
+.lastNumberBox {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-width: 170px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px 14px;
+}
+
+.lastNumberBox span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.lastNumberBox strong {
+  color: #0f3a5f;
+  font-size: 22px;
+  line-height: 1.1;
 }
 
 .hidden { display: none !important; }
@@ -305,6 +336,7 @@ label {
   .topbar { padding: 16px 22px; }
   .brand { font-size: 24px; }
   main { padding: 28px 18px 70px; }
+  .formTopLine { display: grid; grid-template-columns: 1fr; }
   .stats, .compactFilters, .listActions, .checks, .actions, .photoGrid {
     grid-template-columns: 1fr;
   }
