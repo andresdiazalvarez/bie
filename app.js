@@ -172,6 +172,28 @@ function updateStats() {
   $("totalCount").textContent = total;
   $("seenCount").textContent = seen;
   $("pendingCount").textContent = total - seen;
+  updateLastNumberUsed();
+}
+
+function getLastNumberUsed() {
+  const numbers = records.map((record) => safeText(record.cantidad).trim()).filter(Boolean);
+  if (!numbers.length) return "-";
+  numbers.sort((a, b) => compareText(a, b));
+  return numbers[numbers.length - 1];
+}
+
+function updateLastNumberUsed() {
+  const target = $("lastNumberUsed");
+  if (target) target.textContent = getLastNumberUsed();
+}
+
+function clearFilters() {
+  ["filterCliente", "filterEdificio", "filterNumero", "filterSerie"].forEach((id) => {
+    const input = $(id);
+    if (input) input.value = "";
+  });
+  if ($("sortOrder")) $("sortOrder").value = "none";
+  if ($("seenFilter")) $("seenFilter").value = "all";
 }
 
 function showView(name) {
@@ -304,11 +326,14 @@ function openForm(id = null) {
   const photos = Array.isArray(record?.photos) ? record.photos : ["", ""];
   setPhotoPreview(0, photos[0]);
   setPhotoPreview(1, photos[1]);
+  updateLastNumberUsed();
   showView("form");
 }
 
 function collectForm() {
-  const record = { id: $("recordId").value || createId(), origen: $("recordId").value ? "editado" : "manual" };
+  const currentId = $("recordId").value;
+  const editingExisting = Boolean(currentId && records.some((item) => item.id === currentId));
+  const record = { id: editingExisting ? currentId : createId(), origen: editingExisting ? "editado" : "manual" };
   for (const key of fields) record[key] = $(key).value.trim();
   record.defectos = Array.from($("defectsList").querySelectorAll("input:checked")).map((input) => input.value);
   record.photos = [currentPhotos[0] || "", currentPhotos[1] || ""];
@@ -323,6 +348,7 @@ async function saveForm(event) {
   if (index >= 0) records[index] = record;
   else records.unshift(record);
   await saveRecords();
+  clearFilters();
   showView("list");
 }
 
@@ -368,6 +394,7 @@ async function importExcelFile(file) {
   }
   records = [...imported, ...records];
   await saveRecords();
+  clearFilters();
   $("importStatus").textContent = `Importados ${imported.length}. Los repetidos se han mantenido.`;
   alert(`Importación correcta.\nImportados: ${imported.length}\nLos repetidos se han mantenido.`);
 }
