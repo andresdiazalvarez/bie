@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v9-guarda-multiples";
+const CACHE_NAME = "bie-v10-checklist-bie";
 const ASSETS = [
   "./",
   "./index.html",

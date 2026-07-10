@@ -82,12 +82,18 @@
                 <th>Número SYCo</th>
                 <th>Ubicación</th>
                 <th>Modelo</th>
+                <th>Fabricante/Marca</th>
                 <th>Nº serie</th>
                 <th>Fabricación</th>
                 <th>Retimbrado</th>
+                <th>Op. realizadas</th>
+                <th>Cadu 20 A</th>
+                <th>Tipo revisión</th>
+                <th>Estado equipo</th>
                 <th>Observaciones</th>
                 <th>Señal</th>
                 <th>Defectos</th>
+                <th>Checklist</th>
                 <th>Foto 1</th>
                 <th>Foto 2</th>
                 <th>Visto</th>
@@ -125,12 +131,45 @@
               <option value="25T45">25T45</option>
             </select>
           </label>
+          <label>Fabricante / Marca<input id="fabricanteMarca" /></label>
           <label>Nº serie<input id="numeroSerie" /></label>
           <label>Fecha / año fabricación
             <select id="fechaFabricacion"></select>
           </label>
           <label>Fecha retimbrado
             <select id="fechaProximoRetimbrado"></select>
+          </label>
+          <label>Operaciones realizadas<input id="operacionesRealizadas" /></label>
+          <label>Cadu 20 A
+            <select id="cadu20A">
+              <option value="">Sin indicar</option>
+              <option value="X">X</option>
+              <option value="Sí">Sí</option>
+              <option value="No">No</option>
+              <option value="No aplica">No aplica</option>
+            </select>
+          </label>
+          <label>Tipo revisión
+            <select id="tipoRevision">
+              <option value="">Sin indicar</option>
+              <option value="T">T - TRIMESTRAL</option>
+              <option value="A">A - ANUAL</option>
+              <option value="Q">Q - QUINQUENAL</option>
+              <option value="TRIMESTRAL">TRIMESTRAL</option>
+              <option value="ANUAL">ANUAL</option>
+              <option value="QUINQUENAL">QUINQUENAL</option>
+            </select>
+          </label>
+          <label>Estado equipo
+            <select id="estadoEquipo">
+              <option value="">Sin indicar</option>
+              <option value="V">V - Correcto</option>
+              <option value="X">X - Incorrecto</option>
+              <option value="NA">NA - No aplica</option>
+              <option value="Correcto">Correcto</option>
+              <option value="Incorrecto">Incorrecto</option>
+              <option value="No aplica">No aplica</option>
+            </select>
           </label>
           <label>Observaciones<textarea id="observaciones" rows="3"></textarea></label>
           <label>Señal
@@ -152,6 +191,11 @@
           <div class="defectsBlock">
             <h3>Defectos encontrados</h3>
             <div id="defectsList" class="checks"></div>
+          </div>
+
+          <div class="checklistBlock">
+            <h3>Comprobaciones del checklist</h3>
+            <div id="checklistList" class="checks checklistChecks"></div>
           </div>
 
           <div class="photosBlock">

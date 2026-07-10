@@ -11,9 +11,42 @@ const defectOptions = [
   "Lanza mal",
   "Devanadera mal",
   "Sin presión",
+  "Presión baja",
   "Sin señal",
   "Señal caducada",
-  "Armario roto y presión baja",
+  "Armario en mal estado",
+];
+
+const checklistOptions = [
+  ["A", "Etiqueta de revisión visible y legible"],
+  ["B", "Está señalizada"],
+  ["C", "Es accesible"],
+  ["D", "Elementos metálicos sin corrosión visible"],
+  ["E", "Armario en buen estado"],
+  ["F", "Cristal/puerta en perfecto estado"],
+  ["G", "Manómetro con presión adecuada"],
+  ["H", "Conjunto limpio para manejo adecuado"],
+  ["I", "Bisagras y cierre engrasados"],
+  ["J", "Lugar visible"],
+  ["K", "Correctamente fijada"],
+  ["L", "Manguera se desenrolla con facilidad"],
+  ["M", "Manguera en buen estado"],
+  ["N", "Lanza estanca y funcional"],
+  ["O", "Válvula opera correctamente"],
+  ["P", "Acoples estancos y juntas correctas"],
+  ["Q", "Manómetro contrasta correctamente"],
+  ["S", "Retimbrado de manguera menor a 5 años"],
+  ["T", "Caudal constante y suficiente"],
+  ["U", "Manguera certificada UNE-EN 694/14540"],
+  ["V", "Racores certificados UNE 23400"],
+  ["W", "Manguera sin fugas a 15 Kg/cm2"],
+  ["R1", "Red de tuberías sin daños ni corrosión"],
+  ["R2", "Soportación de tubería y equipos correcta"],
+  ["R3", "Válvulas de sectorización abiertas y operativas"],
+  ["R4", "Existe contador para incendios"],
+  ["R5", "Alimentación exclusiva para incendios"],
+  ["R6", "Detector de flujo funciona correctamente"],
+  ["R7", "Válvula motorizada por detección funciona correctamente"],
 ];
 
 const fields = [
@@ -22,9 +55,14 @@ const fields = [
   "cantidad",
   "ubicacion",
   "modelo",
+  "fabricanteMarca",
   "numeroSerie",
   "fechaFabricacion",
   "fechaProximoRetimbrado",
+  "operacionesRealizadas",
+  "cadu20A",
+  "tipoRevision",
+  "estadoEquipo",
   "observaciones",
   "senal",
 ];
@@ -60,10 +98,16 @@ function normalizeDefects(defects) {
   return defects
     .map((defect) => {
       const text = safeText(defect).trim();
-      if (text.endsWith(".")) return text.slice(0, -1);
-      return text;
+      const withoutPeriod = text.endsWith(".") ? text.slice(0, -1) : text;
+      if (withoutPeriod === "Armario roto y presión baja") return "Armario en mal estado";
+      return withoutPeriod;
     })
     .filter((defect) => defectOptions.includes(defect));
+}
+
+function normalizeChecklist(values) {
+  const valid = new Set(checklistOptions.map(([code]) => code));
+  return (Array.isArray(values) ? values : []).map((value) => safeText(value)).filter((value) => valid.has(value));
 }
 
 function normalizeYearValue(value) {
@@ -80,12 +124,18 @@ function cleanRecord(record = {}) {
     cantidad: safeText(record.cantidad),
     ubicacion: safeText(record.ubicacion),
     modelo: safeText(record.modelo),
+    fabricanteMarca: safeText(record.fabricanteMarca),
     numeroSerie: safeText(record.numeroSerie),
     fechaFabricacion: normalizeYearValue(record.fechaFabricacion),
     fechaProximoRetimbrado: normalizeYearValue(record.fechaProximoRetimbrado),
+    operacionesRealizadas: safeText(record.operacionesRealizadas),
+    cadu20A: safeText(record.cadu20A),
+    tipoRevision: safeText(record.tipoRevision),
+    estadoEquipo: safeText(record.estadoEquipo),
     observaciones: safeText(record.observaciones),
     senal: safeText(record.senal),
     defectos: normalizeDefects(record.defectos),
+    checklist: normalizeChecklist(record.checklist),
     photos: Array.isArray(record.photos) ? [safeText(record.photos[0]), safeText(record.photos[1])] : ["", ""],
     visto: Boolean(record.visto),
     origen: record.origen || "excel",
@@ -103,18 +153,27 @@ function excelCellToText(value) {
   return String(value);
 }
 
-function rowToImportedRecord(rowValues, index) {
+function resolveChecklistModel(values) {
+  if (safeText(values[2]).trim()) return "25";
+  if (safeText(values[3]).trim()) return "45";
+  if (safeText(values[4]).trim()) return "25T45";
+  return safeText(values[6]);
+}
+
+function rowToImportedRecord(rowValues, index, metadata = {}) {
   const values = [];
   for (let col = 1; col <= 10; col += 1) values[col] = excelCellToText(rowValues[col]);
   return cleanRecord({
     id: `import-${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`,
-    cantidad: values[2],
-    edificio: values[3],
-    ubicacion: values[4],
-    modelo: values[6],
-    numeroSerie: values[7],
-    fechaFabricacion: values[9],
-    fechaProximoRetimbrado: values[10],
+    cliente: metadata.cliente,
+    edificio: metadata.domicilio,
+    cantidad: values[1],
+    modelo: resolveChecklistModel(values),
+    fabricanteMarca: values[5],
+    fechaFabricacion: values[6],
+    fechaProximoRetimbrado: values[7],
+    operacionesRealizadas: values[8],
+    cadu20A: values[9],
     origen: "importado",
   });
 }
@@ -237,11 +296,12 @@ function renderTable() {
   const rows = filteredRecords();
   body.innerHTML = "";
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="15">No hay registros con ese filtro.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="21">No hay registros con ese filtro.</td></tr>`;
     return;
   }
   for (const record of rows) {
     const defects = record.defectos.length ? record.defectos.join(" / ") : "-";
+    const checklist = record.checklist.length ? record.checklist.join(" / ") : "-";
     const photo1 = record.photos[0] ? `<img class="tablePhoto" src="${record.photos[0]}" alt="Foto 1">` : `<span class="noPhoto">—</span>`;
     const photo2 = record.photos[1] ? `<img class="tablePhoto" src="${record.photos[1]}" alt="Foto 2">` : `<span class="noPhoto">—</span>`;
     const tr = document.createElement("tr");
@@ -251,12 +311,18 @@ function renderTable() {
       <td><strong>${safeText(record.cantidad) || "-"}</strong></td>
       <td>${safeText(record.ubicacion) || "-"}</td>
       <td>${safeText(record.modelo) || "-"}</td>
+      <td>${safeText(record.fabricanteMarca) || "-"}</td>
       <td>${safeText(record.numeroSerie) || "-"}</td>
       <td>${safeText(record.fechaFabricacion) || "-"}</td>
       <td>${safeText(record.fechaProximoRetimbrado) || "-"}</td>
+      <td>${safeText(record.operacionesRealizadas) || "-"}</td>
+      <td>${safeText(record.cadu20A) || "-"}</td>
+      <td>${safeText(record.tipoRevision) || "-"}</td>
+      <td>${safeText(record.estadoEquipo) || "-"}</td>
       <td>${safeText(record.observaciones) || "-"}</td>
       <td>${safeText(record.senal) || "-"}</td>
       <td>${defects}</td>
+      <td>${checklist}</td>
       <td>${photo1}</td>
       <td>${photo2}</td>
       <td><span class="${record.visto ? "ok" : "pending"}">${record.visto ? "Sí" : "No"}</span></td>
@@ -277,6 +343,18 @@ function renderDefects(selected = []) {
     label.className = "checkItem";
     label.innerHTML = `<input type="checkbox" value="${option}"><span>${option}</span>`;
     label.querySelector("input").checked = selected.includes(option);
+    box.appendChild(label);
+  }
+}
+
+function renderChecklist(selected = []) {
+  const box = $("checklistList");
+  box.innerHTML = "";
+  for (const [code, text] of checklistOptions) {
+    const label = document.createElement("label");
+    label.className = "checkItem checklistItem";
+    label.innerHTML = `<input type="checkbox" value="${code}"><span><strong>${code}</strong> ${text}</span>`;
+    label.querySelector("input").checked = selected.includes(code);
     box.appendChild(label);
   }
 }
@@ -323,6 +401,7 @@ function openForm(id = null) {
   for (const key of fields) $(key).value = safeText(record?.[key]);
   $("visto").checked = Boolean(record?.visto);
   renderDefects(record?.defectos || []);
+  renderChecklist(record?.checklist || []);
   const photos = Array.isArray(record?.photos) ? record.photos : ["", ""];
   setPhotoPreview(0, photos[0]);
   setPhotoPreview(1, photos[1]);
@@ -336,6 +415,7 @@ function collectForm() {
   const record = { id: editingExisting ? currentId : createId(), origen: editingExisting ? "editado" : "manual" };
   for (const key of fields) record[key] = $(key).value.trim();
   record.defectos = Array.from($("defectsList").querySelectorAll("input:checked")).map((input) => input.value);
+  record.checklist = Array.from($("checklistList").querySelectorAll("input:checked")).map((input) => input.value);
   record.photos = [currentPhotos[0] || "", currentPhotos[1] || ""];
   record.visto = $("visto").checked;
   return cleanRecord(record);
@@ -343,13 +423,15 @@ function collectForm() {
 
 async function saveForm(event) {
   event.preventDefault();
+  const wasEditing = Boolean($("recordId").value && records.some((item) => item.id === $("recordId").value));
   const record = collectForm();
   const index = records.findIndex((item) => item.id === record.id);
   if (index >= 0) records[index] = record;
   else records.unshift(record);
   await saveRecords();
   clearFilters();
-  showView("list");
+  if (wasEditing) showView("list");
+  else openForm();
 }
 
 async function deleteCurrent() {
@@ -380,11 +462,16 @@ async function importExcelFile(file) {
   await workbook.xlsx.load(await file.arrayBuffer());
   const sheet = workbook.worksheets[0];
   if (!sheet) return alert("No encuentro ninguna hoja en ese Excel.");
+  const metadata = {
+    cliente: excelCellToText(sheet.getCell("E2").value),
+    domicilio: excelCellToText(sheet.getCell("E3").value),
+  };
   const imported = [];
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
-    const record = rowToImportedRecord(row.values, rowNumber);
-    const hasData = [record.edificio, record.cantidad, record.ubicacion, record.modelo, record.numeroSerie].some((value) => safeText(value).trim());
+    const firstCell = excelCellToText(row.values[1]).trim();
+    if (!/^syco\s*\d+/i.test(firstCell)) return;
+    const record = rowToImportedRecord(row.values, rowNumber, metadata);
+    const hasData = [record.cantidad, record.modelo, record.fabricanteMarca, record.fechaFabricacion, record.fechaProximoRetimbrado].some((value) => safeText(value).trim());
     if (!hasData) return;
     imported.push(record);
   });
@@ -415,9 +502,14 @@ async function downloadExcel() {
     ["cantidad", "Número SYCo", 18],
     ["ubicacion", "Ubicación", 42],
     ["modelo", "Modelo", 20],
+    ["fabricanteMarca", "Fabricante/Marca", 22],
     ["numeroSerie", "Nº serie", 18],
     ["fechaFabricacion", "Fecha / año fabricación", 22],
     ["fechaProximoRetimbrado", "Fecha retimbrado", 20],
+    ["operacionesRealizadas", "Op. realizadas", 24],
+    ["cadu20A", "Cadu 20 A", 14],
+    ["tipoRevision", "Tipo revisión", 18],
+    ["estadoEquipo", "Estado equipo", 18],
     ["observaciones", "Observaciones", 34],
     ["senal", "Señal", 14],
     ["defectos", "Defectos encontrados", 42],
@@ -429,9 +521,12 @@ async function downloadExcel() {
     ["defectoLanzaMal", "Lanza mal", 18],
     ["defectoDevanaderaMal", "Devanadera mal", 20],
     ["defectoSinPresion", "Sin presión", 18],
+    ["defectoPresionBaja", "Presión baja", 18],
     ["defectoSinSenal", "Sin señal", 16],
     ["defectoSenalCaducada", "Señal caducada", 20],
-    ["defectoArmarioRotoPresionBaja", "Armario roto y presión baja", 30],
+    ["defectoArmarioMalEstado", "Armario en mal estado", 26],
+    ["checklist", "Comprobaciones checklist", 34],
+    ...checklistOptions.map(([code, text]) => [`check_${code}`, `${code} - ${text}`, 28]),
     ["foto1", "Foto 1", 22],
     ["foto2", "Foto 2", 22],
     ["visto", "Visto", 10],
@@ -444,9 +539,12 @@ async function downloadExcel() {
 
   for (const record of filteredRecords()) {
     const selected = record.defectos || [];
+    const selectedChecklist = record.checklist || [];
+    const checklistFlags = Object.fromEntries(checklistOptions.map(([code]) => [`check_${code}`, selectedChecklist.includes(code) ? "Sí" : ""]));
     const row = sheet.addRow({
       ...record,
       defectos: selected.join(" / "),
+      checklist: selectedChecklist.join(" / "),
       defectoMangueraRota: defectFlag(selected, "Manguera rota"),
       defectoObstaculo: defectFlag(selected, "Hay un obstáculo"),
       defectoCristalRoto: defectFlag(selected, "Cristal roto"),
@@ -455,9 +553,11 @@ async function downloadExcel() {
       defectoLanzaMal: defectFlag(selected, "Lanza mal"),
       defectoDevanaderaMal: defectFlag(selected, "Devanadera mal"),
       defectoSinPresion: defectFlag(selected, "Sin presión"),
+      defectoPresionBaja: defectFlag(selected, "Presión baja"),
       defectoSinSenal: defectFlag(selected, "Sin señal"),
       defectoSenalCaducada: defectFlag(selected, "Señal caducada"),
-      defectoArmarioRotoPresionBaja: defectFlag(selected, "Armario roto y presión baja"),
+      defectoArmarioMalEstado: defectFlag(selected, "Armario en mal estado"),
+      ...checklistFlags,
       foto1: record.photos[0] ? "Foto 1" : "",
       foto2: record.photos[1] ? "Foto 2" : "",
       visto: record.visto ? "Sí" : "No",
@@ -467,7 +567,7 @@ async function downloadExcel() {
       const photo = record.photos[photoIndex];
       if (!photo) return;
       const imageId = workbook.addImage({ base64: photo, extension: "jpeg" });
-      const col = photoIndex === 0 ? 22 : 23;
+      const col = columns.findIndex(([key]) => key === (photoIndex === 0 ? "foto1" : "foto2"));
       sheet.addImage(imageId, { tl: { col, row: row.number - 1 }, ext: { width: 120, height: 85 }, editAs: "oneCell" });
     });
   }
