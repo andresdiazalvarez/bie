@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v10-checklist-bie";
+const CACHE_NAME = "bie-v11-correctivas-checklist";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,7 +7,8 @@ const ASSETS = [
   "./seed-data.js",
   "./manifest.webmanifest",
   "./icon.svg",
-  "./exceljs.min.js"
+  "./exceljs.min.js",
+  "./checklist-bie.xlsx"
 ];
 
 self.addEventListener("install", (event) => {

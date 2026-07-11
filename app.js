@@ -1,6 +1,7 @@
 const DB_NAME = "bie-db-v1";
 const DB_VERSION = 1;
 const STORE_NAME = "state";
+const CHECKLIST_TEMPLATE_URL = "./checklist-bie.xlsx";
 
 const defectOptions = [
   "Manguera rota",
@@ -593,12 +594,243 @@ async function downloadExcel() {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+function downloadWorkbook(workbook, fileName) {
+  return workbook.xlsx.writeBuffer().then((buffer) => {
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+}
+
+function allUsableRecords() {
+  return records
+    .map(cleanRecord)
+    .filter((record) => [record.cliente, record.edificio, record.cantidad, record.ubicacion, record.numeroSerie].some((value) => safeText(value).trim()))
+    .sort((a, b) =>
+      safeText(a.cliente).localeCompare(safeText(b.cliente), "es", { numeric: true, sensitivity: "base" }) ||
+      safeText(a.edificio).localeCompare(safeText(b.edificio), "es", { numeric: true, sensitivity: "base" }) ||
+      safeText(a.cantidad).localeCompare(safeText(b.cantidad), "es", { numeric: true, sensitivity: "base" })
+    );
+}
+
+function isCorrectiveRecord(record) {
+  const estado = safeText(record.estadoEquipo).trim().toUpperCase();
+  return Boolean(
+    (record.defectos || []).length ||
+    (record.checklist || []).length ||
+    (record.observaciones || "").trim() ||
+    (estado && estado !== "OK" && estado !== "CORRECTO" && estado !== "BUENO")
+  );
+}
+
+async function downloadCorrectivas() {
+  if (!window.ExcelJS) return alert("No se ha cargado el generador de Excel.");
+  const correctivas = allUsableRecords().filter(isCorrectiveRecord);
+  if (!correctivas.length) return alert("No hay registros con correctivas para descargar.");
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "BIE";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Correctivas");
+  const columns = [
+    ["cliente", "Cliente", 22],
+    ["edificio", "Edificio", 18],
+    ["cantidad", "Número SYCo", 18],
+    ["ubicacion", "Ubicación", 42],
+    ["modelo", "Modelo", 14],
+    ["fabricanteMarca", "Fabricante/Marca", 22],
+    ["numeroSerie", "Nº serie", 18],
+    ["defectos", "Defectos encontrados", 42],
+    ["checklist", "Checklist marcado", 42],
+    ["estadoEquipo", "Estado equipo", 18],
+    ["observaciones", "Observaciones", 42],
+    ["senal", "Señal", 16],
+    ["foto1", "Foto 1", 22],
+    ["foto2", "Foto 2", 22],
+    ["visto", "Visto", 10],
+  ];
+  sheet.columns = columns.map(([key, header, width]) => ({ key, header, width }));
+  sheet.getRow(1).font = { bold: true, color: { argb: "FF0F3A5F" } };
+  sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFBFDBFE" } };
+  sheet.getRow(1).alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+  sheet.getRow(1).height = 30;
+
+  for (const record of correctivas) {
+    const selectedChecklist = record.checklist || [];
+    const checklistText = selectedChecklist
+      .map((code) => {
+        const option = checklistOptions.find(([optionCode]) => optionCode === code);
+        return option ? `${code} - ${option[1]}` : code;
+      })
+      .join(" / ");
+    const row = sheet.addRow({
+      ...record,
+      defectos: (record.defectos || []).join(" / "),
+      checklist: checklistText,
+      foto1: record.photos[0] ? "Foto 1" : "",
+      foto2: record.photos[1] ? "Foto 2" : "",
+      visto: record.visto ? "Sí" : "No",
+    });
+    if (record.photos[0] || record.photos[1]) row.height = 92;
+    [0, 1].forEach((photoIndex) => {
+      const photo = record.photos[photoIndex];
+      if (!photo) return;
+      const imageId = workbook.addImage({ base64: photo, extension: "jpeg" });
+      const col = columns.findIndex(([key]) => key === (photoIndex === 0 ? "foto1" : "foto2"));
+      sheet.addImage(imageId, { tl: { col, row: row.number - 1 }, ext: { width: 120, height: 85 }, editAs: "oneCell" });
+    });
+  }
+
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
+  sheet.eachRow((row, rowNumber) => {
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFD8E2F0" } },
+        left: { style: "thin", color: { argb: "FFD8E2F0" } },
+        bottom: { style: "thin", color: { argb: "FFD8E2F0" } },
+        right: { style: "thin", color: { argb: "FFD8E2F0" } },
+      };
+      cell.alignment = { vertical: "top", wrapText: true };
+      if (rowNumber > 1 && rowNumber % 2 === 0) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FBFF" } };
+    });
+  });
+
+  return downloadWorkbook(workbook, `Correctivas_BIE_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function copyCell(sourceCell, targetCell) {
+  targetCell.value = sourceCell.value;
+  targetCell.style = JSON.parse(JSON.stringify(sourceCell.style || {}));
+  if (sourceCell.numFmt) targetCell.numFmt = sourceCell.numFmt;
+}
+
+function copyTemplateSheet(workbook, sourceSheet, name) {
+  const sheet = workbook.addWorksheet(name);
+  sheet.pageSetup = JSON.parse(JSON.stringify(sourceSheet.pageSetup || {}));
+  sheet.pageMargins = JSON.parse(JSON.stringify(sourceSheet.pageMargins || {}));
+  sheet.headerFooter = JSON.parse(JSON.stringify(sourceSheet.headerFooter || {}));
+  sheet.views = JSON.parse(JSON.stringify(sourceSheet.views || []));
+  sheet.properties = JSON.parse(JSON.stringify(sourceSheet.properties || {}));
+  for (let col = 1; col <= sourceSheet.columnCount; col += 1) {
+    const sourceCol = sourceSheet.getColumn(col);
+    const targetCol = sheet.getColumn(col);
+    targetCol.width = sourceCol.width;
+    targetCol.hidden = sourceCol.hidden;
+    targetCol.outlineLevel = sourceCol.outlineLevel;
+  }
+  for (let rowNumber = 1; rowNumber <= sourceSheet.rowCount; rowNumber += 1) {
+    const sourceRow = sourceSheet.getRow(rowNumber);
+    const targetRow = sheet.getRow(rowNumber);
+    targetRow.height = sourceRow.height;
+    for (let col = 1; col <= sourceSheet.columnCount; col += 1) {
+      copyCell(sourceRow.getCell(col), targetRow.getCell(col));
+    }
+  }
+  (sourceSheet.model?.merges || []).forEach((range) => sheet.mergeCells(range));
+  return sheet;
+}
+
+function checklistPages() {
+  const rows = allUsableRecords();
+  const pages = [];
+  for (let start = 0; start < rows.length; start += 20) {
+    pages.push(rows.slice(start, start + 20));
+  }
+  return pages;
+}
+
+function pageTitle(rows, index) {
+  const cliente = safeText(rows.find((record) => safeText(record.cliente).trim())?.cliente).trim();
+  const edificios = Array.from(new Set(rows.map((record) => safeText(record.edificio).trim()).filter(Boolean)));
+  const edificio = edificios.length === 1 ? edificios[0] : edificios.length > 1 ? "Varios edificios" : "";
+  return [cliente, edificio].filter(Boolean).join(" - ") || `Checklist ${index}`;
+}
+
+function safeSheetName(value, index) {
+  const name = safeText(value).replace(/[\\/*?:[\]]/g, " ").replace(/\s+/g, " ").trim() || `Checklist ${index}`;
+  return name.slice(0, 25) + (index > 1 ? ` ${index}` : "");
+}
+
+function clearChecklistRows(sheet) {
+  for (let row = 8; row <= 27; row += 1) {
+    for (let col = 1; col <= 40; col += 1) {
+      sheet.getRow(row).getCell(col).value = "";
+    }
+  }
+}
+
+function checklistObservation(record) {
+  return [
+    (record.defectos || []).join(" / "),
+    safeText(record.observaciones).trim(),
+  ].filter(Boolean).join(" / ");
+}
+
+function fillChecklistSheet(sheet, title, rows) {
+  sheet.getCell("E2").value = safeText(rows.find((record) => safeText(record.cliente).trim())?.cliente);
+  sheet.getCell("E3").value = safeText(rows.find((record) => safeText(record.edificio).trim())?.edificio);
+  clearChecklistRows(sheet);
+  rows.forEach((record, index) => {
+    const rowNumber = 8 + index;
+    const row = sheet.getRow(rowNumber);
+    const model = safeText(record.modelo).replace(/\s+/g, "").toUpperCase();
+    const selectedChecklist = new Set(record.checklist || []);
+    row.getCell(1).value = safeText(record.cantidad) || `SYCo ${index + 1}`;
+    row.getCell(2).value = model === "25" ? "X" : "";
+    row.getCell(3).value = model === "45" ? "X" : "";
+    row.getCell(4).value = model === "25T45" || model === "25+T45" ? "X" : "";
+    row.getCell(5).value = safeText(record.fabricanteMarca);
+    row.getCell(6).value = safeText(record.fechaFabricacion);
+    row.getCell(7).value = safeText(record.fechaProximoRetimbrado);
+    row.getCell(8).value = safeText(record.operacionesRealizadas);
+    row.getCell(9).value = safeText(record.cadu20A);
+    const codeColumns = {
+      A: 10, B: 11, C: 12, D: 13, E: 14, F: 15, G: 16, H: 17, I: 18, J: 19,
+      K: 20, L: 21, M: 22, N: 23, O: 24, P: 25, Q: 26, S: 27, T: 28, U: 29,
+      V: 30, R1: 31, R2: 32, R3: 33, R4: 34, R5: 35, R6: 36, R7: 37, W: 38,
+    };
+    Object.entries(codeColumns).forEach(([code, col]) => {
+      row.getCell(col).value = selectedChecklist.has(code) ? "X" : "";
+    });
+    row.getCell(39).value = safeText(record.ubicacion);
+    row.getCell(40).value = checklistObservation(record);
+    row.getCell(40).alignment = { ...(row.getCell(40).alignment || {}), wrapText: true, vertical: "top" };
+    if (row.getCell(40).value) row.height = Math.max(row.height || 18, 30);
+  });
+}
+
+async function downloadChecklist() {
+  if (!window.ExcelJS) return alert("No se ha cargado el generador de Excel.");
+  const pages = checklistPages();
+  if (!pages.length) return alert("No hay registros para generar el checklist.");
+  const response = await fetch(CHECKLIST_TEMPLATE_URL);
+  if (!response.ok) return alert("No se ha podido cargar la plantilla del checklist.");
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await response.arrayBuffer());
+  const templateSheet = workbook.worksheets[0];
+  pages.forEach((rows, index) => {
+    const title = pageTitle(rows, index + 1);
+    const sheet = index === 0 ? templateSheet : copyTemplateSheet(workbook, templateSheet, safeSheetName(title, index + 1));
+    sheet.name = safeSheetName(title, index + 1);
+    fillChecklistSheet(sheet, title, rows);
+  });
+
+  return downloadWorkbook(workbook, `Checklist_BIE_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 function bindEvents() {
   $("openListBtn").addEventListener("click", () => showView("list"));
   $("newRecordBtn").addEventListener("click", () => openForm());
   $("newRecordFromListBtn").addEventListener("click", () => openForm());
   $("downloadExcelBtn").addEventListener("click", downloadExcel);
   $("downloadExcelFromTableBtn").addEventListener("click", downloadExcel);
+  $("downloadCorrectivasBtn").addEventListener("click", downloadCorrectivas);
+  $("downloadChecklistBtn").addEventListener("click", downloadChecklist);
   $("deleteAllBtn").addEventListener("click", deleteAllRecords);
   $("deleteAllFromTableBtn").addEventListener("click", deleteAllRecords);
   $("viewTableFromFormBtn").addEventListener("click", () => showView("list"));

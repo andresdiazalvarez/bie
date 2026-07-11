@@ -121,6 +121,11 @@ button {
   margin-top: 10px;
 }
 
+.grayButton {
+  background: #eef2f7;
+  border-color: #cbd5e1;
+}
+
 .danger {
   width: 100%;
   background: #fff1f1;
