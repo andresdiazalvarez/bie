@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v11-correctivas-checklist";
+const CACHE_NAME = "bie-v12-importa-excel-app";
 const ASSETS = [
   "./",
   "./index.html",

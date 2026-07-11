@@ -179,6 +179,97 @@ function rowToImportedRecord(rowValues, index, metadata = {}) {
   });
 }
 
+function normalizeHeader(value) {
+  return safeText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function truthyExcelValue(value) {
+  const text = normalizeHeader(excelCellToText(value));
+  return Boolean(text && !["no", "false", "0", "sin indicar"].includes(text));
+}
+
+function buildHeaderMap(rowValues) {
+  const map = new Map();
+  rowValues.forEach((value, index) => {
+    const key = normalizeHeader(excelCellToText(value));
+    if (key && !map.has(key)) map.set(key, index);
+  });
+  return map;
+}
+
+function importedValue(rowValues, headerMap, candidates) {
+  for (const candidate of candidates) {
+    const col = headerMap.get(normalizeHeader(candidate));
+    if (col !== undefined) return excelCellToText(rowValues[col]);
+  }
+  return "";
+}
+
+function selectedFromText(text, options) {
+  const normalized = normalizeHeader(text);
+  return options.filter((option) => normalized.includes(normalizeHeader(option)));
+}
+
+function importAppExportRows(sheet) {
+  const headerValues = sheet.getRow(1).values;
+  const headerMap = buildHeaderMap(headerValues);
+  if (!headerMap.has(normalizeHeader("Número SYCo")) && !headerMap.has(normalizeHeader("Cliente"))) return [];
+
+  const imported = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const rowValues = row.values;
+    const selectedDefects = new Set(selectedFromText(importedValue(rowValues, headerMap, ["Defectos encontrados"]), defectOptions));
+    defectOptions.forEach((defect) => {
+      const col = headerMap.get(normalizeHeader(defect));
+      if (col !== undefined && truthyExcelValue(rowValues[col])) selectedDefects.add(defect);
+    });
+
+    const checklistText = importedValue(rowValues, headerMap, ["Comprobaciones checklist"]);
+    const selectedChecklist = new Set(
+      checklistText
+        .split(/[\/,;]+/)
+        .map((item) => safeText(item).trim().split(/\s+/)[0])
+        .filter(Boolean)
+    );
+    checklistOptions.forEach(([code, text]) => {
+      const col = headerMap.get(normalizeHeader(`${code} - ${text}`));
+      if (col !== undefined && truthyExcelValue(rowValues[col])) selectedChecklist.add(code);
+    });
+
+    const record = cleanRecord({
+      id: `import-${Date.now()}-${rowNumber}-${Math.random().toString(16).slice(2)}`,
+      cliente: importedValue(rowValues, headerMap, ["Cliente"]),
+      edificio: importedValue(rowValues, headerMap, ["Edificio"]),
+      cantidad: importedValue(rowValues, headerMap, ["Número SYCo", "Nº SYCo", "Numero SYCo"]),
+      ubicacion: importedValue(rowValues, headerMap, ["Ubicación", "Ubicacion"]),
+      modelo: importedValue(rowValues, headerMap, ["Modelo"]),
+      fabricanteMarca: importedValue(rowValues, headerMap, ["Fabricante/Marca", "Fabricante", "Marca"]),
+      numeroSerie: importedValue(rowValues, headerMap, ["Nº serie", "N° serie", "Numero serie"]),
+      fechaFabricacion: importedValue(rowValues, headerMap, ["Fecha / año fabricación", "Fabricación", "Fabricacion"]),
+      fechaProximoRetimbrado: importedValue(rowValues, headerMap, ["Fecha retimbrado", "Retimbrado"]),
+      operacionesRealizadas: importedValue(rowValues, headerMap, ["Op. realizadas", "Operaciones realizadas"]),
+      cadu20A: importedValue(rowValues, headerMap, ["Cadu 20 A"]),
+      tipoRevision: importedValue(rowValues, headerMap, ["Tipo revisión", "Tipo revision"]),
+      estadoEquipo: importedValue(rowValues, headerMap, ["Estado equipo"]),
+      observaciones: importedValue(rowValues, headerMap, ["Observaciones"]),
+      senal: importedValue(rowValues, headerMap, ["Señal", "Senal"]),
+      defectos: Array.from(selectedDefects),
+      checklist: normalizeChecklist(Array.from(selectedChecklist)),
+      visto: truthyExcelValue(importedValue(rowValues, headerMap, ["Visto"])),
+      origen: "importado",
+    });
+    const hasData = [record.cliente, record.edificio, record.cantidad, record.ubicacion, record.modelo, record.numeroSerie].some((value) => safeText(value).trim());
+    if (hasData) imported.push(record);
+  });
+  return imported;
+}
+
 function openDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -467,15 +558,18 @@ async function importExcelFile(file) {
     cliente: excelCellToText(sheet.getCell("E2").value),
     domicilio: excelCellToText(sheet.getCell("E3").value),
   };
-  const imported = [];
-  sheet.eachRow((row, rowNumber) => {
-    const firstCell = excelCellToText(row.values[1]).trim();
-    if (!/^syco\s*\d+/i.test(firstCell)) return;
-    const record = rowToImportedRecord(row.values, rowNumber, metadata);
-    const hasData = [record.cantidad, record.modelo, record.fabricanteMarca, record.fechaFabricacion, record.fechaProximoRetimbrado].some((value) => safeText(value).trim());
-    if (!hasData) return;
-    imported.push(record);
-  });
+  let imported = importAppExportRows(sheet);
+  if (!imported.length) {
+    imported = [];
+    sheet.eachRow((row, rowNumber) => {
+      const firstCell = excelCellToText(row.values[1]).trim();
+      if (!/^syco\s*\d+/i.test(firstCell)) return;
+      const record = rowToImportedRecord(row.values, rowNumber, metadata);
+      const hasData = [record.cantidad, record.modelo, record.fabricanteMarca, record.fechaFabricacion, record.fechaProximoRetimbrado].some((value) => safeText(value).trim());
+      if (!hasData) return;
+      imported.push(record);
+    });
+  }
   if (!imported.length) {
     $("importStatus").textContent = "No se encontraron registros para importar.";
     return alert("No se encontraron registros para importar.");
