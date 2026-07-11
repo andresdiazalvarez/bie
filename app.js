@@ -202,10 +202,30 @@ function buildHeaderMap(rowValues) {
   return map;
 }
 
+function headerMatches(header, candidate) {
+  const key = normalizeHeader(header);
+  const wanted = normalizeHeader(candidate);
+  if (!key || !wanted) return false;
+  if (key === wanted || key.includes(wanted) || wanted.includes(key)) return true;
+  if (wanted.includes("syco")) return key.includes("syco");
+  if (wanted.includes("serie")) return key.includes("serie");
+  if (wanted.includes("ubicacion")) return key.includes("ubicacion");
+  if (wanted.includes("fabricante") || wanted.includes("marca")) return key.includes("fabricante") || key.includes("marca");
+  if (wanted.includes("fabricacion")) return key.includes("fabricacion") || key.includes("fabri");
+  if (wanted.includes("retimbrado")) return key.includes("retimbre") || key.includes("retimbrado");
+  if (wanted.includes("senal")) return key.includes("senal");
+  return false;
+}
+
 function importedValue(rowValues, headerMap, candidates) {
   for (const candidate of candidates) {
     const col = headerMap.get(normalizeHeader(candidate));
     if (col !== undefined) return excelCellToText(rowValues[col]);
+  }
+  for (const candidate of candidates) {
+    for (const [header, col] of headerMap.entries()) {
+      if (headerMatches(header, candidate)) return excelCellToText(rowValues[col]);
+    }
   }
   return "";
 }
@@ -215,14 +235,28 @@ function selectedFromText(text, options) {
   return options.filter((option) => normalized.includes(normalizeHeader(option)));
 }
 
+function findAppExportHeader(sheet) {
+  let best = null;
+  const wanted = ["cliente", "edificio", "syco", "ubicacion", "modelo", "serie", "foto"];
+  const maxRow = Math.min(sheet.rowCount, 30);
+  for (let rowNumber = 1; rowNumber <= maxRow; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    const headerMap = buildHeaderMap(row.values);
+    const keys = Array.from(headerMap.keys());
+    const score = wanted.reduce((total, word) => total + (keys.some((key) => key.includes(word)) ? 1 : 0), 0);
+    if (!best || score > best.score) best = { rowNumber, headerMap, score };
+  }
+  return best && best.score >= 2 ? best : null;
+}
+
 function importAppExportRows(sheet) {
-  const headerValues = sheet.getRow(1).values;
-  const headerMap = buildHeaderMap(headerValues);
-  if (!headerMap.has(normalizeHeader("Número SYCo")) && !headerMap.has(normalizeHeader("Cliente"))) return [];
+  const headerInfo = findAppExportHeader(sheet);
+  if (!headerInfo) return [];
+  const { rowNumber: headerRowNumber, headerMap } = headerInfo;
 
   const imported = [];
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
+    if (rowNumber <= headerRowNumber) return;
     const rowValues = row.values;
     const selectedDefects = new Set(selectedFromText(importedValue(rowValues, headerMap, ["Defectos encontrados"]), defectOptions));
     defectOptions.forEach((defect) => {
