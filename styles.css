@@ -278,10 +278,6 @@ label {
   gap: 10px;
 }
 
-.checklistChecks {
-  grid-template-columns: 1fr;
-}
-
 .checkItem,
 .seenLine {
   display: flex;

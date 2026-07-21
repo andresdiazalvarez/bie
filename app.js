@@ -4,6 +4,7 @@ const STORE_NAME = "state";
 const CHECKLIST_TEMPLATE_URL = "./checklist-bie.xlsx";
 
 const defectOptions = [
+  "Manguera caducada",
   "Manguera rota",
   "Hay un obstáculo",
   "Cristal roto",
@@ -106,9 +107,8 @@ function normalizeDefects(defects) {
     .filter((defect) => defectOptions.includes(defect));
 }
 
-function normalizeChecklist(values) {
-  const valid = new Set(checklistOptions.map(([code]) => code));
-  return (Array.isArray(values) ? values : []).map((value) => safeText(value)).filter((value) => valid.has(value));
+function normalizeChecklist() {
+  return [];
 }
 
 function normalizeYearValue(value) {
@@ -264,18 +264,6 @@ function importAppExportRows(sheet) {
       if (col !== undefined && truthyExcelValue(rowValues[col])) selectedDefects.add(defect);
     });
 
-    const checklistText = importedValue(rowValues, headerMap, ["Comprobaciones checklist"]);
-    const selectedChecklist = new Set(
-      checklistText
-        .split(/[\/,;]+/)
-        .map((item) => safeText(item).trim().split(/\s+/)[0])
-        .filter(Boolean)
-    );
-    checklistOptions.forEach(([code, text]) => {
-      const col = headerMap.get(normalizeHeader(`${code} - ${text}`));
-      if (col !== undefined && truthyExcelValue(rowValues[col])) selectedChecklist.add(code);
-    });
-
     const record = cleanRecord({
       id: `import-${Date.now()}-${rowNumber}-${Math.random().toString(16).slice(2)}`,
       cliente: importedValue(rowValues, headerMap, ["Cliente"]),
@@ -294,7 +282,7 @@ function importAppExportRows(sheet) {
       observaciones: importedValue(rowValues, headerMap, ["Observaciones"]),
       senal: importedValue(rowValues, headerMap, ["Señal", "Senal"]),
       defectos: Array.from(selectedDefects),
-      checklist: normalizeChecklist(Array.from(selectedChecklist)),
+      checklist: [],
       visto: truthyExcelValue(importedValue(rowValues, headerMap, ["Visto"])),
       origen: "importado",
     });
@@ -422,12 +410,11 @@ function renderTable() {
   const rows = filteredRecords();
   body.innerHTML = "";
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="21">No hay registros con ese filtro.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="20">No hay registros con ese filtro.</td></tr>`;
     return;
   }
   for (const record of rows) {
     const defects = record.defectos.length ? record.defectos.join(" / ") : "-";
-    const checklist = record.checklist.length ? record.checklist.join(" / ") : "-";
     const photo1 = record.photos[0] ? `<img class="tablePhoto" src="${record.photos[0]}" alt="Foto 1">` : `<span class="noPhoto">—</span>`;
     const photo2 = record.photos[1] ? `<img class="tablePhoto" src="${record.photos[1]}" alt="Foto 2">` : `<span class="noPhoto">—</span>`;
     const tr = document.createElement("tr");
@@ -448,7 +435,6 @@ function renderTable() {
       <td>${safeText(record.observaciones) || "-"}</td>
       <td>${safeText(record.senal) || "-"}</td>
       <td>${defects}</td>
-      <td>${checklist}</td>
       <td>${photo1}</td>
       <td>${photo2}</td>
       <td><span class="${record.visto ? "ok" : "pending"}">${record.visto ? "Sí" : "No"}</span></td>
@@ -469,18 +455,6 @@ function renderDefects(selected = []) {
     label.className = "checkItem";
     label.innerHTML = `<input type="checkbox" value="${option}"><span>${option}</span>`;
     label.querySelector("input").checked = selected.includes(option);
-    box.appendChild(label);
-  }
-}
-
-function renderChecklist(selected = []) {
-  const box = $("checklistList");
-  box.innerHTML = "";
-  for (const [code, text] of checklistOptions) {
-    const label = document.createElement("label");
-    label.className = "checkItem checklistItem";
-    label.innerHTML = `<input type="checkbox" value="${code}"><span><strong>${code}</strong> ${text}</span>`;
-    label.querySelector("input").checked = selected.includes(code);
     box.appendChild(label);
   }
 }
@@ -527,7 +501,6 @@ function openForm(id = null) {
   for (const key of fields) $(key).value = safeText(record?.[key]);
   $("visto").checked = Boolean(record?.visto);
   renderDefects(record?.defectos || []);
-  renderChecklist(record?.checklist || []);
   const photos = Array.isArray(record?.photos) ? record.photos : ["", ""];
   setPhotoPreview(0, photos[0]);
   setPhotoPreview(1, photos[1]);
@@ -541,7 +514,7 @@ function collectForm() {
   const record = { id: editingExisting ? currentId : createId(), origen: editingExisting ? "editado" : "manual" };
   for (const key of fields) record[key] = $(key).value.trim();
   record.defectos = Array.from($("defectsList").querySelectorAll("input:checked")).map((input) => input.value);
-  record.checklist = Array.from($("checklistList").querySelectorAll("input:checked")).map((input) => input.value);
+  record.checklist = [];
   record.photos = [currentPhotos[0] || "", currentPhotos[1] || ""];
   record.visto = $("visto").checked;
   return cleanRecord(record);
@@ -642,6 +615,7 @@ async function downloadExcel() {
     ["observaciones", "Observaciones", 34],
     ["senal", "Señal", 14],
     ["defectos", "Defectos encontrados", 42],
+    ["defectoMangueraCaducada", "Manguera caducada", 22],
     ["defectoMangueraRota", "Manguera rota", 20],
     ["defectoObstaculo", "Hay un obstáculo", 20],
     ["defectoCristalRoto", "Cristal roto", 18],
@@ -654,8 +628,6 @@ async function downloadExcel() {
     ["defectoSinSenal", "Sin señal", 16],
     ["defectoSenalCaducada", "Señal caducada", 20],
     ["defectoArmarioMalEstado", "Armario en mal estado", 26],
-    ["checklist", "Comprobaciones checklist", 34],
-    ...checklistOptions.map(([code, text]) => [`check_${code}`, `${code} - ${text}`, 28]),
     ["foto1", "Foto 1", 22],
     ["foto2", "Foto 2", 22],
     ["visto", "Visto", 10],
@@ -668,12 +640,10 @@ async function downloadExcel() {
 
   for (const record of filteredRecords()) {
     const selected = record.defectos || [];
-    const selectedChecklist = record.checklist || [];
-    const checklistFlags = Object.fromEntries(checklistOptions.map(([code]) => [`check_${code}`, selectedChecklist.includes(code) ? "Sí" : ""]));
     const row = sheet.addRow({
       ...record,
       defectos: selected.join(" / "),
-      checklist: selectedChecklist.join(" / "),
+      defectoMangueraCaducada: defectFlag(selected, "Manguera caducada"),
       defectoMangueraRota: defectFlag(selected, "Manguera rota"),
       defectoObstaculo: defectFlag(selected, "Hay un obstáculo"),
       defectoCristalRoto: defectFlag(selected, "Cristal roto"),
@@ -686,7 +656,6 @@ async function downloadExcel() {
       defectoSinSenal: defectFlag(selected, "Sin señal"),
       defectoSenalCaducada: defectFlag(selected, "Señal caducada"),
       defectoArmarioMalEstado: defectFlag(selected, "Armario en mal estado"),
-      ...checklistFlags,
       foto1: record.photos[0] ? "Foto 1" : "",
       foto2: record.photos[1] ? "Foto 2" : "",
       visto: record.visto ? "Sí" : "No",
@@ -748,7 +717,6 @@ function isCorrectiveRecord(record) {
   const estado = safeText(record.estadoEquipo).trim().toUpperCase();
   return Boolean(
     (record.defectos || []).length ||
-    (record.checklist || []).length ||
     (record.observaciones || "").trim() ||
     (estado && estado !== "OK" && estado !== "CORRECTO" && estado !== "BUENO")
   );
@@ -772,7 +740,6 @@ async function downloadCorrectivas() {
     ["fabricanteMarca", "Fabricante/Marca", 22],
     ["numeroSerie", "Nº serie", 18],
     ["defectos", "Defectos encontrados", 42],
-    ["checklist", "Checklist marcado", 42],
     ["estadoEquipo", "Estado equipo", 18],
     ["observaciones", "Observaciones", 42],
     ["senal", "Señal", 16],
@@ -787,17 +754,9 @@ async function downloadCorrectivas() {
   sheet.getRow(1).height = 30;
 
   for (const record of correctivas) {
-    const selectedChecklist = record.checklist || [];
-    const checklistText = selectedChecklist
-      .map((code) => {
-        const option = checklistOptions.find(([optionCode]) => optionCode === code);
-        return option ? `${code} - ${option[1]}` : code;
-      })
-      .join(" / ");
     const row = sheet.addRow({
       ...record,
       defectos: (record.defectos || []).join(" / "),
-      checklist: checklistText,
       foto1: record.photos[0] ? "Foto 1" : "",
       foto2: record.photos[1] ? "Foto 2" : "",
       visto: record.visto ? "Sí" : "No",
@@ -906,7 +865,6 @@ function fillChecklistSheet(sheet, title, rows) {
     const rowNumber = 8 + index;
     const row = sheet.getRow(rowNumber);
     const model = safeText(record.modelo).replace(/\s+/g, "").toUpperCase();
-    const selectedChecklist = new Set(record.checklist || []);
     row.getCell(1).value = safeText(record.cantidad) || `SYCo ${index + 1}`;
     row.getCell(2).value = model === "25" ? "X" : "";
     row.getCell(3).value = model === "45" ? "X" : "";
@@ -921,8 +879,8 @@ function fillChecklistSheet(sheet, title, rows) {
       K: 20, L: 21, M: 22, N: 23, O: 24, P: 25, Q: 26, S: 27, T: 28, U: 29,
       V: 30, R1: 31, R2: 32, R3: 33, R4: 34, R5: 35, R6: 36, R7: 37, W: 38,
     };
-    Object.entries(codeColumns).forEach(([code, col]) => {
-      row.getCell(col).value = selectedChecklist.has(code) ? "X" : "";
+    Object.values(codeColumns).forEach((col) => {
+      row.getCell(col).value = "";
     });
     row.getCell(39).value = safeText(record.ubicacion);
     row.getCell(40).value = checklistObservation(record);

@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v13-importa-tabla-app";
+const CACHE_NAME = "bie-v14-defectos-sin-checks";
 const ASSETS = [
   "./",
   "./index.html",
