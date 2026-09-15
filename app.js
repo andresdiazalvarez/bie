@@ -230,6 +230,19 @@ function importedValue(rowValues, headerMap, candidates) {
   return "";
 }
 
+function headerColumn(headerMap, candidates) {
+  for (const candidate of candidates) {
+    const col = headerMap.get(normalizeHeader(candidate));
+    if (col !== undefined) return col;
+  }
+  for (const candidate of candidates) {
+    for (const [header, col] of headerMap.entries()) {
+      if (headerMatches(header, candidate)) return col;
+    }
+  }
+  return null;
+}
+
 function selectedFromText(text, options) {
   const normalized = normalizeHeader(text);
   return options.filter((option) => normalized.includes(normalizeHeader(option)));
@@ -249,10 +262,61 @@ function findAppExportHeader(sheet) {
   return best && best.score >= 2 ? best : null;
 }
 
-function importAppExportRows(sheet) {
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+function workbookImageToDataUrl(workbook, imageId) {
+  const image = workbook.getImage?.(imageId);
+  if (!image) return "";
+  const extension = safeText(image.extension || "jpeg").toLowerCase();
+  const mime = extension === "png" ? "image/png" : extension === "gif" ? "image/gif" : "image/jpeg";
+  if (image.base64) {
+    return image.base64.startsWith("data:") ? image.base64 : `data:${mime};base64,${image.base64}`;
+  }
+  if (!image.buffer) return "";
+  const bytes = image.buffer instanceof Uint8Array ? image.buffer : new Uint8Array(image.buffer);
+  return `data:${mime};base64,${bytesToBase64(bytes)}`;
+}
+
+function extractPhotosByRow(workbook, sheet, headerInfo) {
+  if (typeof sheet.getImages !== "function") return new Map();
+  const foto1Col = headerColumn(headerInfo.headerMap, ["Foto 1"]);
+  const foto2Col = headerColumn(headerInfo.headerMap, ["Foto 2"]);
+  if (!foto1Col && !foto2Col) return new Map();
+
+  const photosByRow = new Map();
+  sheet.getImages().forEach((sheetImage) => {
+    const topLeft = sheetImage.range?.tl;
+    if (!topLeft) return;
+    const rowNumber = Math.floor(Number(topLeft.nativeRow ?? topLeft.row ?? 0)) + 1;
+    const colNumber = Math.floor(Number(topLeft.nativeCol ?? topLeft.col ?? 0)) + 1;
+    if (rowNumber <= headerInfo.rowNumber) return;
+    const distances = [
+      foto1Col ? Math.abs(colNumber - foto1Col) : Number.POSITIVE_INFINITY,
+      foto2Col ? Math.abs(colNumber - foto2Col) : Number.POSITIVE_INFINITY,
+    ];
+    const photoIndex = distances[1] < distances[0] ? 1 : 0;
+    const photo = workbookImageToDataUrl(workbook, sheetImage.imageId);
+    if (!photo) return;
+    const rowPhotos = photosByRow.get(rowNumber) || ["", ""];
+    rowPhotos[photoIndex] = photo;
+    photosByRow.set(rowNumber, rowPhotos);
+  });
+  return photosByRow;
+}
+
+function importAppExportRows(workbook, sheet) {
   const headerInfo = findAppExportHeader(sheet);
   if (!headerInfo) return [];
   const { rowNumber: headerRowNumber, headerMap } = headerInfo;
+  const photosByRow = extractPhotosByRow(workbook, sheet, headerInfo);
 
   const imported = [];
   sheet.eachRow((row, rowNumber) => {
@@ -283,6 +347,7 @@ function importAppExportRows(sheet) {
       senal: importedValue(rowValues, headerMap, ["Señal", "Senal"]),
       defectos: Array.from(selectedDefects),
       checklist: [],
+      photos: photosByRow.get(rowNumber) || ["", ""],
       visto: truthyExcelValue(importedValue(rowValues, headerMap, ["Visto"])),
       origen: "importado",
     });
@@ -565,7 +630,7 @@ async function importExcelFile(file) {
     cliente: excelCellToText(sheet.getCell("E2").value),
     domicilio: excelCellToText(sheet.getCell("E3").value),
   };
-  let imported = importAppExportRows(sheet);
+  let imported = importAppExportRows(workbook, sheet);
   if (!imported.length) {
     imported = [];
     sheet.eachRow((row, rowNumber) => {

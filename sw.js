@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v14-defectos-sin-checks";
+const CACHE_NAME = "bie-v15-importa-fotos-excel";
 const ASSETS = [
   "./",
   "./index.html",
