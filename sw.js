@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v16-tabla-visto-directo";
+const CACHE_NAME = "bie-v17-tabla-compacta-fecha";
 const ASSETS = [
   "./",
   "./index.html",

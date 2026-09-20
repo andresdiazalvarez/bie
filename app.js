@@ -14,6 +14,7 @@ const defectOptions = [
   "Devanadera mal",
   "Sin presión",
   "Presión baja",
+  "Presión mal",
   "Sin señal",
   "Señal caducada",
   "Armario en mal estado",
@@ -87,7 +88,7 @@ function fillYearLists() {
   const retimbrado = $("fechaProximoRetimbrado");
   fabricacion.innerHTML = `<option value="">Sin indicar</option>`;
   retimbrado.innerHTML = `<option value="">Sin indicar</option>`;
-  for (let year = 2005; year <= 2026; year += 1) {
+  for (let year = 2000; year <= 2026; year += 1) {
     fabricacion.insertAdjacentHTML("beforeend", `<option value="${year}">${year}</option>`);
   }
   for (let year = 2010; year <= 2026; year += 1) {
@@ -112,9 +113,7 @@ function normalizeChecklist() {
 }
 
 function normalizeYearValue(value) {
-  const text = safeText(value);
-  const match = text.match(/\b(19\d{2}|20\d{2})\b/);
-  return match ? match[1] : text;
+  return safeText(value).trim();
 }
 
 function cleanRecord(record = {}) {
@@ -486,6 +485,7 @@ function renderTable() {
     tr.innerHTML = `
       <td>${photo1}</td>
       <td>${photo2}</td>
+      <td><button class="editBtn" type="button" data-edit="${record.id}">Ver / corregir</button></td>
       <td>
         <button
           class="seenToggle ${record.visto ? "isSeen" : "isPending"}"
@@ -496,7 +496,6 @@ function renderTable() {
           title="Pulsa para marcar como ${record.visto ? "no visto" : "visto"}"
         >${record.visto ? "Sí" : "No"}</button>
       </td>
-      <td><button class="editBtn" type="button" data-edit="${record.id}">Ver / corregir</button></td>
       <td>${safeText(record.cliente) || "-"}</td>
       <td>${safeText(record.edificio) || "-"}</td>
       <td><strong>${safeText(record.cantidad) || "-"}</strong></td>
@@ -582,6 +581,10 @@ function openForm(id = null) {
   $("formKicker").textContent = record ? "REGISTRO EXISTENTE" : "NUEVO REGISTRO";
   $("deleteBtn").classList.toggle("hidden", !record);
   for (const key of fields) $(key).value = safeText(record?.[key]);
+  const fabricationValue = safeText(record?.fechaFabricacion);
+  const fabricationHasOption = Array.from($("fechaFabricacion").options).some((option) => option.value === fabricationValue);
+  $("fechaFabricacion").value = fabricationHasOption ? fabricationValue : "";
+  $("fechaFabricacionManual").value = fabricationHasOption ? "" : fabricationValue;
   $("visto").checked = Boolean(record?.visto);
   renderDefects(record?.defectos || []);
   const photos = Array.isArray(record?.photos) ? record.photos : ["", ""];
@@ -596,6 +599,7 @@ function collectForm() {
   const editingExisting = Boolean(currentId && records.some((item) => item.id === currentId));
   const record = { id: editingExisting ? currentId : createId(), origen: editingExisting ? "editado" : "manual" };
   for (const key of fields) record[key] = $(key).value.trim();
+  record.fechaFabricacion = $("fechaFabricacionManual").value.trim() || $("fechaFabricacion").value.trim();
   record.defectos = Array.from($("defectsList").querySelectorAll("input:checked")).map((input) => input.value);
   record.checklist = [];
   record.photos = [currentPhotos[0] || "", currentPhotos[1] || ""];
@@ -708,6 +712,7 @@ async function downloadExcel() {
     ["defectoDevanaderaMal", "Devanadera mal", 20],
     ["defectoSinPresion", "Sin presión", 18],
     ["defectoPresionBaja", "Presión baja", 18],
+    ["defectoPresionMal", "Presión mal", 18],
     ["defectoSinSenal", "Sin señal", 16],
     ["defectoSenalCaducada", "Señal caducada", 20],
     ["defectoArmarioMalEstado", "Armario en mal estado", 26],
@@ -736,6 +741,7 @@ async function downloadExcel() {
       defectoDevanaderaMal: defectFlag(selected, "Devanadera mal"),
       defectoSinPresion: defectFlag(selected, "Sin presión"),
       defectoPresionBaja: defectFlag(selected, "Presión baja"),
+      defectoPresionMal: defectFlag(selected, "Presión mal"),
       defectoSinSenal: defectFlag(selected, "Sin señal"),
       defectoSenalCaducada: defectFlag(selected, "Señal caducada"),
       defectoArmarioMalEstado: defectFlag(selected, "Armario en mal estado"),
@@ -1024,6 +1030,12 @@ function bindEvents() {
     $(id).addEventListener("change", renderTable);
   });
   $("recordForm").addEventListener("submit", saveForm);
+  $("fechaFabricacion").addEventListener("change", () => {
+    if ($("fechaFabricacion").value) $("fechaFabricacionManual").value = "";
+  });
+  $("fechaFabricacionManual").addEventListener("input", () => {
+    if ($("fechaFabricacionManual").value.trim()) $("fechaFabricacion").value = "";
+  });
   $("deleteBtn").addEventListener("click", deleteCurrent);
   [0, 1].forEach((index) => {
     $(`photoInput${index + 1}`).addEventListener("change", async (event) => {
