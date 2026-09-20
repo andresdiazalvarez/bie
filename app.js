@@ -484,6 +484,19 @@ function renderTable() {
     const photo2 = record.photos[1] ? `<img class="tablePhoto" src="${record.photos[1]}" alt="Foto 2">` : `<span class="noPhoto">—</span>`;
     const tr = document.createElement("tr");
     tr.innerHTML = `
+      <td>${photo1}</td>
+      <td>${photo2}</td>
+      <td>
+        <button
+          class="seenToggle ${record.visto ? "isSeen" : "isPending"}"
+          type="button"
+          data-toggle-seen="${record.id}"
+          aria-pressed="${record.visto}"
+          aria-label="Marcar registro como ${record.visto ? "no visto" : "visto"}"
+          title="Pulsa para marcar como ${record.visto ? "no visto" : "visto"}"
+        >${record.visto ? "Sí" : "No"}</button>
+      </td>
+      <td><button class="editBtn" type="button" data-edit="${record.id}">Ver / corregir</button></td>
       <td>${safeText(record.cliente) || "-"}</td>
       <td>${safeText(record.edificio) || "-"}</td>
       <td><strong>${safeText(record.cantidad) || "-"}</strong></td>
@@ -500,13 +513,18 @@ function renderTable() {
       <td>${safeText(record.observaciones) || "-"}</td>
       <td>${safeText(record.senal) || "-"}</td>
       <td>${defects}</td>
-      <td>${photo1}</td>
-      <td>${photo2}</td>
-      <td><span class="${record.visto ? "ok" : "pending"}">${record.visto ? "Sí" : "No"}</span></td>
-      <td><button class="editBtn" data-edit="${record.id}">Ver / corregir</button></td>
     `;
     body.appendChild(tr);
   }
+  body.querySelectorAll("[data-toggle-seen]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const record = records.find((item) => item.id === button.dataset.toggleSeen);
+      if (!record) return;
+      record.visto = !record.visto;
+      await saveRecords();
+      renderTable();
+    });
+  });
   body.querySelectorAll("[data-edit]").forEach((button) => {
     button.addEventListener("click", () => openForm(button.dataset.edit));
   });

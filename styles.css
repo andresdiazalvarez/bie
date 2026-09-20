@@ -245,11 +245,35 @@ th {
 .pending { color: #a15a00; }
 
 .editBtn {
-  background: var(--red);
-  color: #0f3a5f;
+  background: #1976d2;
+  color: #fff;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: 8px;
   font-size: 14px;
+  white-space: nowrap;
+}
+
+.editBtn:hover { background: #125fa9; }
+
+.seenToggle {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.seenToggle.isSeen {
+  background: #239b56;
+  border-color: #16753e;
+}
+
+.seenToggle.isPending {
+  background: #ec6f9e;
+  border-color: #c84d7c;
 }
 
 .tablePhoto {
