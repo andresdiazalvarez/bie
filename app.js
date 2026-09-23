@@ -615,7 +615,6 @@ async function saveForm(event) {
   if (index >= 0) records[index] = record;
   else records.unshift(record);
   await saveRecords();
-  clearFilters();
   if (wasEditing) showView("list");
   else openForm();
 }
@@ -670,7 +669,6 @@ async function importExcelFile(file) {
   }
   records = [...imported, ...records];
   await saveRecords();
-  clearFilters();
   $("importStatus").textContent = `Importados ${imported.length}. Los repetidos se han mantenido.`;
   alert(`Importación correcta.\nImportados: ${imported.length}\nLos repetidos se han mantenido.`);
 }

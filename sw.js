@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v17-tabla-compacta-fecha";
+const CACHE_NAME = "bie-v18-conservar-filtros";
 const ASSETS = [
   "./",
   "./index.html",
