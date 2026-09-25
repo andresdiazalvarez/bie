@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v18-conservar-filtros";
+const CACHE_NAME = "bie-v19-cuatro-fotos";
 const ASSETS = [
   "./",
   "./index.html",

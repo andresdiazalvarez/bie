@@ -57,6 +57,7 @@ const fields = [
   "edificio",
   "cantidad",
   "ubicacion",
+  "localizacion",
   "modelo",
   "fabricanteMarca",
   "numeroSerie",
@@ -71,7 +72,7 @@ const fields = [
 ];
 
 let records = [];
-let currentPhotos = ["", ""];
+let currentPhotos = ["", "", "", ""];
 
 const $ = (id) => document.getElementById(id);
 
@@ -123,6 +124,7 @@ function cleanRecord(record = {}) {
     edificio: safeText(record.edificio ?? record.edificioCodigo),
     cantidad: safeText(record.cantidad),
     ubicacion: safeText(record.ubicacion),
+    localizacion: safeText(record.localizacion),
     modelo: safeText(record.modelo),
     fabricanteMarca: safeText(record.fabricanteMarca),
     numeroSerie: safeText(record.numeroSerie),
@@ -136,7 +138,9 @@ function cleanRecord(record = {}) {
     senal: safeText(record.senal),
     defectos: normalizeDefects(record.defectos),
     checklist: normalizeChecklist(record.checklist),
-    photos: Array.isArray(record.photos) ? [safeText(record.photos[0]), safeText(record.photos[1])] : ["", ""],
+    photos: Array.isArray(record.photos)
+      ? [0, 1, 2, 3].map((index) => safeText(record.photos[index]))
+      : ["", "", "", ""],
     visto: Boolean(record.visto),
     origen: record.origen || "excel",
   };
@@ -286,9 +290,8 @@ function workbookImageToDataUrl(workbook, imageId) {
 
 function extractPhotosByRow(workbook, sheet, headerInfo) {
   if (typeof sheet.getImages !== "function") return new Map();
-  const foto1Col = headerColumn(headerInfo.headerMap, ["Foto 1"]);
-  const foto2Col = headerColumn(headerInfo.headerMap, ["Foto 2"]);
-  if (!foto1Col && !foto2Col) return new Map();
+  const photoColumns = [1, 2, 3, 4].map((number) => headerColumn(headerInfo.headerMap, [`Foto ${number}`]));
+  if (photoColumns.every((column) => !column)) return new Map();
 
   const photosByRow = new Map();
   sheet.getImages().forEach((sheetImage) => {
@@ -297,14 +300,16 @@ function extractPhotosByRow(workbook, sheet, headerInfo) {
     const rowNumber = Math.floor(Number(topLeft.nativeRow ?? topLeft.row ?? 0)) + 1;
     const colNumber = Math.floor(Number(topLeft.nativeCol ?? topLeft.col ?? 0)) + 1;
     if (rowNumber <= headerInfo.rowNumber) return;
-    const distances = [
-      foto1Col ? Math.abs(colNumber - foto1Col) : Number.POSITIVE_INFINITY,
-      foto2Col ? Math.abs(colNumber - foto2Col) : Number.POSITIVE_INFINITY,
-    ];
-    const photoIndex = distances[1] < distances[0] ? 1 : 0;
+    const distances = photoColumns.map((column) =>
+      column ? Math.abs(colNumber - column) : Number.POSITIVE_INFINITY
+    );
+    const photoIndex = distances.reduce(
+      (closest, distance, index) => distance < distances[closest] ? index : closest,
+      0
+    );
     const photo = workbookImageToDataUrl(workbook, sheetImage.imageId);
     if (!photo) return;
-    const rowPhotos = photosByRow.get(rowNumber) || ["", ""];
+    const rowPhotos = photosByRow.get(rowNumber) || ["", "", "", ""];
     rowPhotos[photoIndex] = photo;
     photosByRow.set(rowNumber, rowPhotos);
   });
@@ -333,6 +338,7 @@ function importAppExportRows(workbook, sheet) {
       edificio: importedValue(rowValues, headerMap, ["Edificio"]),
       cantidad: importedValue(rowValues, headerMap, ["Número SYCo", "Nº SYCo", "Numero SYCo"]),
       ubicacion: importedValue(rowValues, headerMap, ["Ubicación", "Ubicacion"]),
+      localizacion: importedValue(rowValues, headerMap, ["Localización", "Localizacion"]),
       modelo: importedValue(rowValues, headerMap, ["Modelo"]),
       fabricanteMarca: importedValue(rowValues, headerMap, ["Fabricante/Marca", "Fabricante", "Marca"]),
       numeroSerie: importedValue(rowValues, headerMap, ["Nº serie", "N° serie", "Numero serie"]),
@@ -346,7 +352,7 @@ function importAppExportRows(workbook, sheet) {
       senal: importedValue(rowValues, headerMap, ["Señal", "Senal"]),
       defectos: Array.from(selectedDefects),
       checklist: [],
-      photos: photosByRow.get(rowNumber) || ["", ""],
+      photos: photosByRow.get(rowNumber) || ["", "", "", ""],
       visto: truthyExcelValue(importedValue(rowValues, headerMap, ["Visto"])),
       origen: "importado",
     });
@@ -587,9 +593,8 @@ function openForm(id = null) {
   $("fechaFabricacionManual").value = fabricationHasOption ? "" : fabricationValue;
   $("visto").checked = Boolean(record?.visto);
   renderDefects(record?.defectos || []);
-  const photos = Array.isArray(record?.photos) ? record.photos : ["", ""];
-  setPhotoPreview(0, photos[0]);
-  setPhotoPreview(1, photos[1]);
+  const photos = Array.isArray(record?.photos) ? record.photos : ["", "", "", ""];
+  [0, 1, 2, 3].forEach((index) => setPhotoPreview(index, photos[index]));
   updateLastNumberUsed();
   showView("form");
 }
@@ -602,7 +607,7 @@ function collectForm() {
   record.fechaFabricacion = $("fechaFabricacionManual").value.trim() || $("fechaFabricacion").value.trim();
   record.defectos = Array.from($("defectsList").querySelectorAll("input:checked")).map((input) => input.value);
   record.checklist = [];
-  record.photos = [currentPhotos[0] || "", currentPhotos[1] || ""];
+  record.photos = [0, 1, 2, 3].map((index) => currentPhotos[index] || "");
   record.visto = $("visto").checked;
   return cleanRecord(record);
 }
@@ -688,6 +693,7 @@ async function downloadExcel() {
     ["edificio", "Edificio", 14],
     ["cantidad", "Número SYCo", 18],
     ["ubicacion", "Ubicación", 42],
+    ["localizacion", "Localización", 30],
     ["modelo", "Modelo", 20],
     ["fabricanteMarca", "Fabricante/Marca", 22],
     ["numeroSerie", "Nº serie", 18],
@@ -716,6 +722,8 @@ async function downloadExcel() {
     ["defectoArmarioMalEstado", "Armario en mal estado", 26],
     ["foto1", "Foto 1", 22],
     ["foto2", "Foto 2", 22],
+    ["foto3", "Foto 3", 22],
+    ["foto4", "Foto 4", 22],
     ["visto", "Visto", 10],
   ];
   sheet.columns = columns.map(([key, header, width]) => ({ key, header, width }));
@@ -745,14 +753,16 @@ async function downloadExcel() {
       defectoArmarioMalEstado: defectFlag(selected, "Armario en mal estado"),
       foto1: record.photos[0] ? "Foto 1" : "",
       foto2: record.photos[1] ? "Foto 2" : "",
+      foto3: record.photos[2] ? "Foto 3" : "",
+      foto4: record.photos[3] ? "Foto 4" : "",
       visto: record.visto ? "Sí" : "No",
     });
-    if (record.photos[0] || record.photos[1]) row.height = 92;
-    [0, 1].forEach((photoIndex) => {
+    if (record.photos.some(Boolean)) row.height = 92;
+    [0, 1, 2, 3].forEach((photoIndex) => {
       const photo = record.photos[photoIndex];
       if (!photo) return;
       const imageId = workbook.addImage({ base64: photo, extension: "jpeg" });
-      const col = columns.findIndex(([key]) => key === (photoIndex === 0 ? "foto1" : "foto2"));
+      const col = columns.findIndex(([key]) => key === `foto${photoIndex + 1}`);
       sheet.addImage(imageId, { tl: { col, row: row.number - 1 }, ext: { width: 120, height: 85 }, editAs: "oneCell" });
     });
   }
@@ -823,6 +833,7 @@ async function downloadCorrectivas() {
     ["edificio", "Edificio", 18],
     ["cantidad", "Número SYCo", 18],
     ["ubicacion", "Ubicación", 42],
+    ["localizacion", "Localización", 30],
     ["modelo", "Modelo", 14],
     ["fabricanteMarca", "Fabricante/Marca", 22],
     ["numeroSerie", "Nº serie", 18],
@@ -832,6 +843,8 @@ async function downloadCorrectivas() {
     ["senal", "Señal", 16],
     ["foto1", "Foto 1", 22],
     ["foto2", "Foto 2", 22],
+    ["foto3", "Foto 3", 22],
+    ["foto4", "Foto 4", 22],
     ["visto", "Visto", 10],
   ];
   sheet.columns = columns.map(([key, header, width]) => ({ key, header, width }));
@@ -846,14 +859,16 @@ async function downloadCorrectivas() {
       defectos: (record.defectos || []).join(" / "),
       foto1: record.photos[0] ? "Foto 1" : "",
       foto2: record.photos[1] ? "Foto 2" : "",
+      foto3: record.photos[2] ? "Foto 3" : "",
+      foto4: record.photos[3] ? "Foto 4" : "",
       visto: record.visto ? "Sí" : "No",
     });
-    if (record.photos[0] || record.photos[1]) row.height = 92;
-    [0, 1].forEach((photoIndex) => {
+    if (record.photos.some(Boolean)) row.height = 92;
+    [0, 1, 2, 3].forEach((photoIndex) => {
       const photo = record.photos[photoIndex];
       if (!photo) return;
       const imageId = workbook.addImage({ base64: photo, extension: "jpeg" });
-      const col = columns.findIndex(([key]) => key === (photoIndex === 0 ? "foto1" : "foto2"));
+      const col = columns.findIndex(([key]) => key === `foto${photoIndex + 1}`);
       sheet.addImage(imageId, { tl: { col, row: row.number - 1 }, ext: { width: 120, height: 85 }, editAs: "oneCell" });
     });
   }
@@ -1035,7 +1050,7 @@ function bindEvents() {
     if ($("fechaFabricacionManual").value.trim()) $("fechaFabricacion").value = "";
   });
   $("deleteBtn").addEventListener("click", deleteCurrent);
-  [0, 1].forEach((index) => {
+  [0, 1, 2, 3].forEach((index) => {
     $(`photoInput${index + 1}`).addEventListener("change", async (event) => {
       const file = event.target.files?.[0];
       if (!file) return;

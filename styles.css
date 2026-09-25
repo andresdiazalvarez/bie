@@ -370,6 +370,14 @@ label {
 .photoBox span { font-size: 20px; font-weight: 850; }
 .photoBox img { width: 100%; height: 220px; object-fit: cover; }
 
+.extraPhotoGrid { margin-top: 14px; }
+
+.extraPhotoBox {
+  background: #b8860b;
+  border-color: #795b08;
+  color: #fff;
+}
+
 .photoDelete {
   background: #fff;
   color: #b00020;
