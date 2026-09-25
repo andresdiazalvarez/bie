@@ -373,9 +373,23 @@ label {
 .extraPhotoGrid { margin-top: 14px; }
 
 .extraPhotoBox {
-  background: #b8860b;
-  border-color: #795b08;
-  color: #fff;
+  background: #f2c94c;
+  border-color: #ad8100;
+  color: #3d3000;
+}
+
+.locationHighlight {
+  padding: 14px;
+  background: #f2c94c;
+  border: 2px solid #ad8100;
+  border-radius: 14px;
+  color: #3d3000;
+}
+
+.locationHighlight input {
+  background: #f2c94c;
+  border-color: #ad8100;
+  color: #3d3000;
 }
 
 .photoDelete {
