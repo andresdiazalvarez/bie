@@ -380,15 +380,15 @@ label {
 
 .locationHighlight {
   padding: 14px;
-  background: #f2c94c;
-  border: 2px solid #ad8100;
+  background: #fff3b0;
+  border: 2px solid #d6b94c;
   border-radius: 14px;
   color: #3d3000;
 }
 
 .locationHighlight input {
-  background: #f2c94c;
-  border-color: #ad8100;
+  background: #fff9d9;
+  border-color: #d6b94c;
   color: #3d3000;
 }
 
