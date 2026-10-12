@@ -117,6 +117,12 @@ function normalizeYearValue(value) {
   return safeText(value).trim();
 }
 
+function normalizePhotos(photos) {
+  const normalized = Array.isArray(photos) ? photos.map((photo) => safeText(photo)) : [];
+  while (normalized.length < 4) normalized.push("");
+  return normalized;
+}
+
 function cleanRecord(record = {}) {
   return {
     id: record.id || createId(),
@@ -138,9 +144,7 @@ function cleanRecord(record = {}) {
     senal: safeText(record.senal),
     defectos: normalizeDefects(record.defectos),
     checklist: normalizeChecklist(record.checklist),
-    photos: Array.isArray(record.photos)
-      ? [0, 1, 2, 3].map((index) => safeText(record.photos[index]))
-      : ["", "", "", ""],
+    photos: normalizePhotos(record.photos),
     visto: Boolean(record.visto),
     origen: record.origen || "excel",
   };
@@ -290,8 +294,14 @@ function workbookImageToDataUrl(workbook, imageId) {
 
 function extractPhotosByRow(workbook, sheet, headerInfo) {
   if (typeof sheet.getImages !== "function") return new Map();
-  const photoColumns = [1, 2, 3, 4].map((number) => headerColumn(headerInfo.headerMap, [`Foto ${number}`]));
-  if (photoColumns.every((column) => !column)) return new Map();
+  const photoColumns = Array.from(headerInfo.headerMap.entries())
+    .map(([header, column]) => {
+      const match = header.match(/^foto\s*(\d+)$/);
+      return match ? { index: Number(match[1]) - 1, column } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.index - b.index);
+  if (!photoColumns.length) return new Map();
 
   const photosByRow = new Map();
   sheet.getImages().forEach((sheetImage) => {
@@ -300,16 +310,14 @@ function extractPhotosByRow(workbook, sheet, headerInfo) {
     const rowNumber = Math.floor(Number(topLeft.nativeRow ?? topLeft.row ?? 0)) + 1;
     const colNumber = Math.floor(Number(topLeft.nativeCol ?? topLeft.col ?? 0)) + 1;
     if (rowNumber <= headerInfo.rowNumber) return;
-    const distances = photoColumns.map((column) =>
-      column ? Math.abs(colNumber - column) : Number.POSITIVE_INFINITY
+    const closest = photoColumns.reduce((best, item) =>
+      Math.abs(colNumber - item.column) < Math.abs(colNumber - best.column) ? item : best
     );
-    const photoIndex = distances.reduce(
-      (closest, distance, index) => distance < distances[closest] ? index : closest,
-      0
-    );
+    const photoIndex = closest.index;
     const photo = workbookImageToDataUrl(workbook, sheetImage.imageId);
     if (!photo) return;
-    const rowPhotos = photosByRow.get(rowNumber) || ["", "", "", ""];
+    const rowPhotos = photosByRow.get(rowNumber) || Array(Math.max(4, photoIndex + 1)).fill("");
+    while (rowPhotos.length <= photoIndex) rowPhotos.push("");
     rowPhotos[photoIndex] = photo;
     photosByRow.set(rowNumber, rowPhotos);
   });
@@ -593,7 +601,8 @@ function openForm(id = null) {
   $("fechaFabricacionManual").value = fabricationHasOption ? "" : fabricationValue;
   $("visto").checked = Boolean(record?.visto);
   renderDefects(record?.defectos || []);
-  const photos = Array.isArray(record?.photos) ? record.photos : ["", "", "", ""];
+  const photos = normalizePhotos(record?.photos);
+  currentPhotos = [...photos];
   [0, 1, 2, 3].forEach((index) => setPhotoPreview(index, photos[index]));
   updateLastNumberUsed();
   showView("form");
@@ -607,7 +616,7 @@ function collectForm() {
   record.fechaFabricacion = $("fechaFabricacionManual").value.trim() || $("fechaFabricacion").value.trim();
   record.defectos = Array.from($("defectsList").querySelectorAll("input:checked")).map((input) => input.value);
   record.checklist = [];
-  record.photos = [0, 1, 2, 3].map((index) => currentPhotos[index] || "");
+  record.photos = normalizePhotos(currentPhotos);
   record.visto = $("visto").checked;
   return cleanRecord(record);
 }
@@ -646,12 +655,11 @@ async function deleteAllRecords() {
   $("importStatus").textContent = "Registros existentes eliminados. Ya puedes importar otro cliente.";
 }
 
-async function importExcelFile(file) {
-  if (!window.ExcelJS) return alert("No se ha cargado el lector de Excel.");
+async function readRecordsFromExcelFile(file) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(await file.arrayBuffer());
   const sheet = workbook.worksheets[0];
-  if (!sheet) return alert("No encuentro ninguna hoja en ese Excel.");
+  if (!sheet) throw new Error("El Excel no contiene ninguna hoja.");
   const metadata = {
     cliente: excelCellToText(sheet.getCell("E2").value),
     domicilio: excelCellToText(sheet.getCell("E3").value),
@@ -668,6 +676,12 @@ async function importExcelFile(file) {
       imported.push(record);
     });
   }
+  return imported;
+}
+
+async function importExcelFile(file) {
+  if (!window.ExcelJS) return alert("No se ha cargado el lector de Excel.");
+  const imported = await readRecordsFromExcelFile(file);
   if (!imported.length) {
     $("importStatus").textContent = "No se encontraron registros para importar.";
     return alert("No se encontraron registros para importar.");
@@ -676,6 +690,143 @@ async function importExcelFile(file) {
   await saveRecords();
   $("importStatus").textContent = `Importados ${imported.length}. Los repetidos se han mantenido.`;
   alert(`Importación correcta.\nImportados: ${imported.length}\nLos repetidos se han mantenido.`);
+}
+
+function sycoKey(value) {
+  return normalizeHeader(value);
+}
+
+function combineObservations(existingValue, incomingValue) {
+  const existing = safeText(existingValue).trim();
+  const incoming = safeText(incomingValue).trim();
+  if (!incoming) return { value: existing, changed: false };
+  if (!existing) return { value: incoming, changed: true };
+
+  const parts = existing.split(/\r?\n/).map((part) => part.trim()).filter(Boolean);
+  const known = new Set(parts.map(normalizeHeader));
+  const additions = incoming
+    .split(/\r?\n/)
+    .map((part) => part.trim())
+    .filter((part) => part && !known.has(normalizeHeader(part)));
+  return {
+    value: additions.length ? [...parts, ...additions].join("\n") : existing,
+    changed: additions.length > 0,
+  };
+}
+
+function combinePhotos(existingPhotos, incomingPhotos) {
+  const photos = normalizePhotos(existingPhotos);
+  let changed = false;
+  normalizePhotos(incomingPhotos).forEach((photo, preferredIndex) => {
+    if (!photo || photos.includes(photo)) return;
+    let targetIndex = !photos[preferredIndex] ? preferredIndex : photos.findIndex((item) => !item);
+    if (targetIndex < 0) targetIndex = photos.length;
+    photos[targetIndex] = photo;
+    changed = true;
+  });
+  return { photos, changed };
+}
+
+function mergeRecordWithoutOverwriting(existing, incoming) {
+  let changed = false;
+  fields.filter((field) => field !== "observaciones").forEach((field) => {
+    if (!safeText(existing[field]).trim() && safeText(incoming[field]).trim()) {
+      existing[field] = incoming[field];
+      changed = true;
+    }
+  });
+
+  const observations = combineObservations(existing.observaciones, incoming.observaciones);
+  if (observations.changed) {
+    existing.observaciones = observations.value;
+    changed = true;
+  }
+
+  const defects = Array.from(new Set([...(existing.defectos || []), ...(incoming.defectos || [])]));
+  if (defects.length !== (existing.defectos || []).length) {
+    existing.defectos = defects;
+    changed = true;
+  }
+
+  const combinedPhotos = combinePhotos(existing.photos, incoming.photos);
+  if (combinedPhotos.changed) {
+    existing.photos = combinedPhotos.photos;
+    changed = true;
+  }
+
+  if (!existing.visto && incoming.visto) {
+    existing.visto = true;
+    changed = true;
+  }
+  return changed;
+}
+
+async function mergeExcelFiles(files) {
+  if (!window.ExcelJS) return alert("No se ha cargado el lector de Excel.");
+  const incomingRecords = [];
+  let filesWithoutRecords = 0;
+  let failedFiles = 0;
+
+  for (const file of files) {
+    try {
+      const imported = await readRecordsFromExcelFile(file);
+      if (imported.length) incomingRecords.push(...imported);
+      else filesWithoutRecords += 1;
+    } catch (error) {
+      console.error(`No se ha podido leer ${file.name}`, error);
+      failedFiles += 1;
+    }
+  }
+
+  if (!incomingRecords.length) {
+    const message = "No se encontraron registros válidos para unir.";
+    $("mergeStatus").textContent = message;
+    alert(message);
+    return;
+  }
+
+  const recordsBySyco = new Map();
+  records.forEach((record) => {
+    const key = sycoKey(record.cantidad);
+    if (key && !recordsBySyco.has(key)) recordsBySyco.set(key, record);
+  });
+
+  let added = 0;
+  let matches = 0;
+  let withoutSyco = 0;
+  const combinedIds = new Set();
+
+  incomingRecords.forEach((incomingRecord) => {
+    const key = sycoKey(incomingRecord.cantidad);
+    if (!key) {
+      withoutSyco += 1;
+      return;
+    }
+    const existing = recordsBySyco.get(key);
+    if (!existing) {
+      const addedRecord = cleanRecord({ ...incomingRecord, id: createId(), origen: "union" });
+      records.push(addedRecord);
+      recordsBySyco.set(key, addedRecord);
+      added += 1;
+      return;
+    }
+
+    matches += 1;
+    if (mergeRecordWithoutOverwriting(existing, incomingRecord)) combinedIds.add(existing.id);
+  });
+
+  await saveRecords();
+  renderTable();
+  const details = [
+    `Añadidos: ${added}`,
+    `Combinados: ${combinedIds.size}`,
+    `Coincidencias: ${matches}`,
+  ];
+  if (withoutSyco) details.push(`Sin Número SYCo: ${withoutSyco}`);
+  if (filesWithoutRecords) details.push(`Excel sin registros: ${filesWithoutRecords}`);
+  if (failedFiles) details.push(`Excel no leídos: ${failedFiles}`);
+  $("mergeStatus").textContent = details.join(" · ");
+  alert(`Unión terminada.\n${details.join("\n")}`);
 }
 
 function defectFlag(selected, defect) {
@@ -688,6 +839,8 @@ async function downloadExcel() {
   workbook.creator = "BIE";
   workbook.created = new Date();
   const sheet = workbook.addWorksheet("BIE");
+  const exportRecords = records.map(cleanRecord);
+  const photoColumnCount = Math.max(4, ...exportRecords.map((record) => record.photos.length));
   const columns = [
     ["cliente", "Cliente", 22],
     ["edificio", "Edificio", 14],
@@ -720,19 +873,18 @@ async function downloadExcel() {
     ["defectoSinSenal", "Sin señal", 16],
     ["defectoSenalCaducada", "Señal caducada", 20],
     ["defectoArmarioMalEstado", "Armario en mal estado", 26],
-    ["foto1", "Foto 1", 22],
-    ["foto2", "Foto 2", 22],
-    ["foto3", "Foto 3", 22],
-    ["foto4", "Foto 4", 22],
-    ["visto", "Visto", 10],
   ];
+  for (let index = 1; index <= photoColumnCount; index += 1) {
+    columns.push([`foto${index}`, `Foto ${index}`, 22]);
+  }
+  columns.push(["visto", "Visto", 10]);
   sheet.columns = columns.map(([key, header, width]) => ({ key, header, width }));
   sheet.getRow(1).font = { bold: true, color: { argb: "FF0F3A5F" } };
   sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF93C5FD" } };
   sheet.getRow(1).alignment = { vertical: "middle", horizontal: "center", wrapText: true };
   sheet.getRow(1).height = 30;
 
-  for (const record of filteredRecords()) {
+  for (const record of exportRecords) {
     const selected = record.defectos || [];
     const row = sheet.addRow({
       ...record,
@@ -751,15 +903,11 @@ async function downloadExcel() {
       defectoSinSenal: defectFlag(selected, "Sin señal"),
       defectoSenalCaducada: defectFlag(selected, "Señal caducada"),
       defectoArmarioMalEstado: defectFlag(selected, "Armario en mal estado"),
-      foto1: record.photos[0] ? "Foto 1" : "",
-      foto2: record.photos[1] ? "Foto 2" : "",
-      foto3: record.photos[2] ? "Foto 3" : "",
-      foto4: record.photos[3] ? "Foto 4" : "",
+      ...Object.fromEntries(record.photos.map((photo, index) => [`foto${index + 1}`, photo ? `Foto ${index + 1}` : ""])),
       visto: record.visto ? "Sí" : "No",
     });
     if (record.photos.some(Boolean)) row.height = 92;
-    [0, 1, 2, 3].forEach((photoIndex) => {
-      const photo = record.photos[photoIndex];
+    record.photos.forEach((photo, photoIndex) => {
       if (!photo) return;
       const imageId = workbook.addImage({ base64: photo, extension: "jpeg" });
       const col = columns.findIndex(([key]) => key === `foto${photoIndex + 1}`);
@@ -828,6 +976,7 @@ async function downloadCorrectivas() {
   workbook.creator = "BIE";
   workbook.created = new Date();
   const sheet = workbook.addWorksheet("Correctivas");
+  const photoColumnCount = Math.max(4, ...correctivas.map((record) => record.photos.length));
   const columns = [
     ["cliente", "Cliente", 22],
     ["edificio", "Edificio", 18],
@@ -841,12 +990,11 @@ async function downloadCorrectivas() {
     ["estadoEquipo", "Estado equipo", 18],
     ["observaciones", "Observaciones", 42],
     ["senal", "Señal", 16],
-    ["foto1", "Foto 1", 22],
-    ["foto2", "Foto 2", 22],
-    ["foto3", "Foto 3", 22],
-    ["foto4", "Foto 4", 22],
-    ["visto", "Visto", 10],
   ];
+  for (let index = 1; index <= photoColumnCount; index += 1) {
+    columns.push([`foto${index}`, `Foto ${index}`, 22]);
+  }
+  columns.push(["visto", "Visto", 10]);
   sheet.columns = columns.map(([key, header, width]) => ({ key, header, width }));
   sheet.getRow(1).font = { bold: true, color: { argb: "FF0F3A5F" } };
   sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFBFDBFE" } };
@@ -857,15 +1005,11 @@ async function downloadCorrectivas() {
     const row = sheet.addRow({
       ...record,
       defectos: (record.defectos || []).join(" / "),
-      foto1: record.photos[0] ? "Foto 1" : "",
-      foto2: record.photos[1] ? "Foto 2" : "",
-      foto3: record.photos[2] ? "Foto 3" : "",
-      foto4: record.photos[3] ? "Foto 4" : "",
+      ...Object.fromEntries(record.photos.map((photo, index) => [`foto${index + 1}`, photo ? `Foto ${index + 1}` : ""])),
       visto: record.visto ? "Sí" : "No",
     });
     if (record.photos.some(Boolean)) row.height = 92;
-    [0, 1, 2, 3].forEach((photoIndex) => {
-      const photo = record.photos[photoIndex];
+    record.photos.forEach((photo, photoIndex) => {
       if (!photo) return;
       const imageId = workbook.addImage({ base64: photo, extension: "jpeg" });
       const col = columns.findIndex(([key]) => key === `foto${photoIndex + 1}`);
@@ -1035,6 +1179,24 @@ function bindEvents() {
       $("importStatus").textContent = "No se ha podido importar el Excel.";
       alert("No se ha podido importar el Excel. Revisa que tenga el mismo formato.");
     } finally {
+      event.target.value = "";
+    }
+  });
+  $("mergeExcelBtn").addEventListener("click", () => $("mergeExcelInput").click());
+  $("mergeExcelInput").addEventListener("change", async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    const button = $("mergeExcelBtn");
+    button.disabled = true;
+    $("mergeStatus").textContent = `Uniendo ${files.length} Excel...`;
+    try {
+      await mergeExcelFiles(files);
+    } catch (error) {
+      console.error(error);
+      $("mergeStatus").textContent = "No se han podido unir los Excel.";
+      alert("No se han podido unir los Excel. Revisa que sean archivos descargados desde la app BIE.");
+    } finally {
+      button.disabled = false;
       event.target.value = "";
     }
   });
