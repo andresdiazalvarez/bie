@@ -1,4 +1,4 @@
-const CACHE_NAME = "bie-v22-unir-trabajos";
+const CACHE_NAME = "bie-v23-presion-alta";
 const ASSETS = [
   "./",
   "./index.html",
