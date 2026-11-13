@@ -596,6 +596,9 @@ function openForm(id = null) {
   $("formKicker").textContent = record ? "REGISTRO EXISTENTE" : "NUEVO REGISTRO";
   $("deleteBtn").classList.toggle("hidden", !record);
   for (const key of fields) $(key).value = safeText(record?.[key]);
+  if (!record) {
+    $("cliente").value = safeText(records.find((item) => safeText(item.cliente).trim())?.cliente);
+  }
   const fabricationValue = safeText(record?.fechaFabricacion);
   const fabricationHasOption = Array.from($("fechaFabricacion").options).some((option) => option.value === fabricationValue);
   $("fechaFabricacion").value = fabricationHasOption ? fabricationValue : "";
@@ -823,7 +826,7 @@ async function mergeExcelFiles(files) {
     `Combinados: ${combinedIds.size}`,
     `Coincidencias: ${matches}`,
   ];
-  if (withoutSyco) details.push(`Sin Número SYCo: ${withoutSyco}`);
+  if (withoutSyco) details.push(`Sin nº syco: ${withoutSyco}`);
   if (filesWithoutRecords) details.push(`Excel sin registros: ${filesWithoutRecords}`);
   if (failedFiles) details.push(`Excel no leídos: ${failedFiles}`);
   $("mergeStatus").textContent = details.join(" · ");
